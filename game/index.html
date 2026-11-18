@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Porto Vela — open-world crime in the spirit of GTA 6</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #1a2028;
+    font-family: 'Segoe UI', system-ui, sans-serif; color: #fff; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  #fatal { display: none; position: fixed; inset: 0; background: #400; color: #fff; padding: 40px; z-index: 99; }
+  #test-results { display: none; }
+  /* HUD */
+  #hud { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  #minimap { position: absolute; left: 16px; bottom: 16px; width: 168px; height: 168px;
+    border: 2px solid rgba(255,255,255,.55); border-radius: 50%; background: #20262e; }
+  #stats { position: absolute; right: 16px; top: 14px; text-align: right; text-shadow: 0 1px 3px #000; }
+  #stars { font-size: 26px; letter-spacing: 3px; color: #ffd23e; }
+  #stars.hot { animation: blink 0.7s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .45; } }
+  #cash { font-size: 22px; font-weight: 700; color: #7dd87d; }
+  #health { margin-top: 6px; width: 190px; height: 12px; background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.5); margin-left: auto; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#37b24d,#94d82d); }
+  #health-num { font-size: 12px; }
+  #speedo { position: absolute; right: 18px; bottom: 18px; text-align: right; text-shadow: 0 1px 3px #000; }
+  #speed { font-size: 44px; font-weight: 800; line-height: 1; }
+  #speed-unit { font-size: 13px; opacity: .85; }
+  #mission { position: absolute; left: 16px; top: 14px; max-width: 430px; text-shadow: 0 1px 3px #000; }
+  #mission-title { font-size: 19px; font-weight: 800; color: #ffd23e; }
+  #mission-text { font-size: 15px; margin-top: 2px; }
+  #mission-timer { font-size: 22px; font-weight: 800; color: #ff8a5c; }
+  #radio { position: absolute; left: 200px; bottom: 22px; font-size: 13px; opacity: .9; text-shadow: 0 1px 3px #000; }
+  #hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+    font-size: 13px; opacity: .9; text-shadow: 0 1px 3px #000; }
+  #msg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); max-width: 620px;
+    text-align: center; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px #000;
+    transition: opacity .4s; }
+  #crosshair { display: none; position: fixed; left: 50%; top: 50%; width: 18px; height: 18px;
+    margin: -9px 0 0 -9px; z-index: 6; pointer-events: none; }
+  #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #fff;
+    box-shadow: 0 0 3px #000; }
+  #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
+  #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
+  /* Screens */
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    flex-direction: column; text-align: center; z-index: 10;
+    background: linear-gradient(180deg, rgba(20,16,40,.82), rgba(120,50,20,.78)); padding: 20px; }
+  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 4px; color: #ffd23e;
+    text-shadow: 0 4px 0 #7a2a00, 0 8px 24px #000; }
+  .screen h2 { font-size: 20px; font-weight: 400; margin: 6px 0 18px; color: #ffe9b0; }
+  .screen p { max-width: 640px; font-size: 16px; line-height: 1.55; }
+  .screen .controls { font-size: 14px; opacity: .92; line-height: 1.8; background: rgba(0,0,0,.35);
+    padding: 12px 22px; border-radius: 10px; margin: 14px 0; }
+  .screen button { pointer-events: auto; font-size: 18px; font-weight: 700; padding: 12px 34px;
+    margin: 6px; border: none; border-radius: 8px; cursor: pointer;
+    background: #ffd23e; color: #241a00; box-shadow: 0 4px 0 #a87e00; }
+  .screen button.secondary { background: rgba(255,255,255,.16); color: #fff; box-shadow: none;
+    border: 1px solid rgba(255,255,255,.5); }
+  #title-screen { display: flex; }
+  #wasted-screen { background: linear-gradient(180deg, rgba(40,0,0,.85), rgba(10,10,10,.9)); }
+  #wasted-screen h1 { color: #ff5040; text-shadow: 0 4px 0 #400, 0 8px 24px #000; }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Porto Vela: a 3D open-world crime game. Steal cars, outrun the police and run eight story jobs across Porto Vela."></canvas>
+<p id="status" role="status" aria-live="polite"></p>
+<div id="fatal"></div>
+<div id="test-results"></div>
+
+<div id="hud">
+  <canvas id="minimap" width="168" height="168"></canvas>
+  <div id="mission"><div id="mission-title"></div><div id="mission-text"></div><div id="mission-timer"></div></div>
+  <div id="stats">
+    <div id="stars">☆☆☆☆☆</div>
+    <div id="cash">$0</div>
+    <div id="health"><div id="health-fill"></div></div>
+    <div id="health-num">100</div>
+  </div>
+  <div id="speedo"><div id="speed">—</div><div id="speed-unit">on foot</div></div>
+  <div id="radio">♪ VELA FM — synthwave</div>
+  <div id="hint">WASD move · Shift run · E enter car · Click shoot</div>
+  <div id="msg"></div>
+</div>
+<div id="crosshair"></div>
+
+<div id="title-screen" class="screen">
+  <h1>PORTO VELA</h1>
+  <h2>An open-world crime story in the spirit of GTA 6 — built from scratch, in your browser</h2>
+  <p id="story-intro"></p>
+  <div class="controls">
+    <b>WASD</b> move / drive &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>E</b> steal &amp; enter car, exit car<br>
+    <b>Mouse drag</b> look around &nbsp;·&nbsp; <b>Click</b> shoot &nbsp;·&nbsp; <b>1 / 2 / 3</b> radio &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; <b>P</b> pause<br>
+    8 story jobs · 5-star wanted · police chases &amp; helicopter · traffic &amp; pedestrians · saves
+  </div>
+  <div>
+    <button id="btn-start">▶ Start the story</button>
+    <button id="btn-continue" class="secondary">Continue saved game</button>
+  </div>
+  <p style="font-size:13px;opacity:.75">Original game — no Rockstar content. Runs fully offline; progress saves in your browser.</p>
+</div>
+
+<div id="pause-screen" class="screen">
+  <h1 style="font-size:44px">PAUSED</h1>
+  <p>Porto Vela waits. The cops do not.</p>
+  <div>
+    <button id="btn-resume">Resume</button>
+    <button id="btn-restart" class="secondary">Restart story</button>
+    <button id="btn-title" class="secondary">Title screen</button>
+  </div>
+</div>
+
+<div id="end-screen" class="screen">
+  <h1 id="end-title">KING OF VELA</h1>
+  <p id="end-text"></p>
+  <div><button id="btn-again">Play again</button></div>
+</div>
+
+<div id="wasted-screen" class="screen">
+  <h1 id="wasted-title">WASTED</h1>
+  <p id="wasted-text"></p>
+  <div>
+    <button id="btn-wasted-ok">Get back up</button>
+    <button id="btn-title-2" class="secondary">Title screen</button>
+  </div>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
