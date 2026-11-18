@@ -17,6 +17,21 @@ export class MissionManager {
     this.completed = new Set();
   }
   current() { return MISSIONS[this.index] || null; }
+  // Stage info for the HUD mission panel: current step / total steps, and
+  // the next thing to do (next step text, or the next job's name).
+  stageInfo() {
+    const m = this.current();
+    if (!m) return null;
+    const total = m.steps.length;
+    const cur = Math.min(this.step + 1, total);
+    let next = '';
+    if (this.step + 1 < total) next = m.steps[this.step + 1].text;
+    else {
+      const nm = MISSIONS[this.index + 1];
+      next = nm ? `Next job: #${nm.id} ${nm.name}` : 'Final job — sail out a legend.';
+    }
+    return { cur, total, next };
+  }
   currentStep() { const m = this.current(); return m ? m.steps[this.step] : null; }
   stepText() {
     const s = this.currentStep();
@@ -38,7 +53,12 @@ export class MissionManager {
     const m = this.current();
     if (m.barks) {
       for (const b of m.barks) {
-        if (b.step === this.step) this.hooks.log(b.text, 6000);
+        if (b.step === this.step) {
+          // Barks play as a portrait dialog (Mara / Rook / the Client);
+          // the feed is for mission notices, not for people talking.
+          if (this.hooks.onBark) this.hooks.onBark({ who: b.who || 'mara', text: b.text });
+          else this.hooks.log(b.text, 6000);
+        }
       }
     }
     if (s.type === 'goto' || s.type === 'deliver') {
@@ -64,8 +84,6 @@ export class MissionManager {
       this.chaseTarget = this.hooks.spawnChaseCar();
     } else if (s.type === 'survive') {
       this.timer = s.time;
-    } else if (s.type === 'deliver') {
-      this.timer = 0; // counts UP; fail when it passes s.time
     }
   }
   showBeacon(x, z) {

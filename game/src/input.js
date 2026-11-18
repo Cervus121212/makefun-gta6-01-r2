@@ -45,15 +45,17 @@ export class Input {
   scriptDown(code) { this.scripted.add(code); }
   scriptUp(code) { this.scripted.delete(code); }
   scriptClick() { this.clicked = true; }
-  axis() {
+  axis(dt) {
     let x = 0, y = 0;
     if (this.down('KeyW') || this.down('ArrowUp')) y += 1;
     if (this.down('KeyS') || this.down('ArrowDown')) y -= 1;
     if (this.down('KeyA') || this.down('ArrowLeft')) x -= 1;
     if (this.down('KeyD') || this.down('ArrowRight')) x += 1;
     // Ease toward the target: full lock in ~0.12s, release in ~0.2s. Steering
-    // and throttle stop snapping from 0 to 1 in a single frame.
-    const k = 1 - Math.exp(-(x !== 0 || y !== 0 ? 22 : 14) * 0.016);
+    // and throttle stop snapping from 0 to 1 in a single frame. The rate uses
+    // the real frame dt (defaulting to 1/60s) so it is frame-rate independent.
+    const step = dt || 0.016;
+    const k = 1 - Math.exp(-(x !== 0 || y !== 0 ? 22 : 14) * step);
     this.smoothX += (x - this.smoothX) * k;
     this.smoothY += (y - this.smoothY) * k;
     return { x: this.smoothX, y: this.smoothY };

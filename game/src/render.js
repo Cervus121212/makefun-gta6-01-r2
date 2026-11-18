@@ -2,17 +2,32 @@
 import * as THREE from '../vendor/three/three.module.min.js';
 import { clamp, lerp, damp, angleLerp, smoothstep } from './random.js';
 
-// Golden hour slowly slides toward dusk as a session runs: the sun sinks and
-// reddens, the fog warms, and the streetlights matter more. Purely cosmetic,
-// ~8 minutes from gold to deep dusk, and it never touches gameplay.
-export function updateDaylight(scene, sun, timeSec) {
-  const t = smoothstep(0, 480, timeSec);
+// Golden hour slides toward dusk as the game clock advances: the sun sinks
+// and reddens, the fog warms toward pink-purple, the sky tints, the
+// streetlights matter more, and the low sun disc over the sea drops toward
+// the water. Purely cosmetic; it never touches gameplay. duskT is 0 at
+// 18:52 and 1 at 19:40 (see main.js gameMinutes()).
+export function updateDaylight(scene, sun, duskT, lampMat, skyMat, sunDisc) {
+  const t = smoothstep(0, 1, clamp(duskT, 0, 1));
   sun.intensity = lerp(1.6, 1.05, t);
   sun.color.setHex(0xffd9a0).lerp(_duskSun, t);
   scene.fog.color.setHex(0xf2c184).lerp(_duskFog, t);
+  // Streetlight bulbs brighten as the sun goes down, so the city visibly
+  // lights up at dusk instead of the lamps staying flat all session.
+  if (lampMat) lampMat.emissiveIntensity = lerp(0.7, 2.4, t);
+  // The sky dome tints pink-purple at dusk (its vertex colours are
+  // multiplied by the material colour).
+  if (skyMat) skyMat.color.setHex(0xffffff).lerp(_duskSky, t);
+  // The sun sinks toward the sea and reddens as it sets.
+  if (sunDisc) {
+    sunDisc.position.y = lerp(34, 19, t);
+    sunDisc.material.color.setHex(0xffc46b).lerp(_duskDisc, t);
+  }
 }
 const _duskSun = new THREE.Color(0xff7a45);
-const _duskFog = new THREE.Color(0xc96a4a);
+const _duskFog = new THREE.Color(0xa85a7a);
+const _duskSky = new THREE.Color(0xdd99bb);
+const _duskDisc = new THREE.Color(0xff8a5c);
 
 export function createRenderer(canvas, lowfx = false) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowfx });
@@ -44,6 +59,16 @@ export function createScene(lowfx = false) {
   const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false }));
   scene.add(sky);
 
+  // Low sun over the western sea: a sphere, so it reads as a round sun from
+  // every direction (a flat disc turns edge-on and vanishes from the side).
+  // Warm gold and big enough to read against the bright sky.
+  const sunDisc = new THREE.Mesh(
+    new THREE.SphereGeometry(28, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xffc46b, fog: false, transparent: true, opacity: 0.95 }),
+  );
+  sunDisc.position.set(-300, 34, 340);
+  scene.add(sunDisc);
+
   const hemi = new THREE.HemisphereLight(0xffe0b0, 0x3a4a5a, 0.85);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xffd9a0, 1.6);
@@ -57,14 +82,14 @@ export function createScene(lowfx = false) {
   sun.shadow.camera.far = 700;
   sun.shadow.bias = -0.0004;
   scene.add(sun);
-  return { scene, sun };
+  return { scene, sun, skyMat: sky.material, sunDisc };
 }
 
 export class ChaseCamera {
   constructor(camera) {
     this.camera = camera;
     this.yaw = Math.PI;      // behind the player looking north
-    this.pitch = 0.32;
+    this.pitch = 0.22;       // low default: the crosshair ray stays near torso height
     this.dist = 11;
     this.pos = new THREE.Vector3(0, 8, 30);
     this.look = new THREE.Vector3(0, 1.5, 0);
@@ -77,7 +102,10 @@ export class ChaseCamera {
     if ((input.mouseDX || 0) !== 0 || (input.mouseDY || 0) !== 0) this.lastDragT = 0;
     else this.lastDragT += dt;
     this.yaw -= (input.mouseDX || 0) * 0.004;
-    this.pitch = clamp(this.pitch + (input.mouseDY || 0) * 0.003, 0.08, 1.1);
+    // On foot the pitch stays low (0.05..0.55): a high chase camera looks down
+    // at the player's head, so the crosshair ray dives into the ground before
+    // it reaches a rival 10m away. In a car the full range is fine.
+    this.pitch = clamp(this.pitch + (input.mouseDY || 0) * 0.003, 0.05, inCar ? 1.1 : 0.55);
     if (input.wheel) this.dist = clamp(this.dist + input.wheel * 0.01, 6, 20);
     // While driving and the mouse has been idle >1.5s, ease the camera back
     // behind the car's direction of travel — no more steering blind.
@@ -93,7 +121,11 @@ export class ChaseCamera {
     const wantDist = inCar ? this.dist + speed01 * 4 : this.dist;
     const cx = target.x - Math.sin(this.yaw) * Math.cos(this.pitch) * wantDist;
     const cz = target.z - Math.cos(this.yaw) * Math.cos(this.pitch) * wantDist;
-    const cy = target.y + 2 + Math.sin(this.pitch) * wantDist;
+    // On foot the camera rides low and flat (base 1.35m, pitch counts half):
+    // the sightline from the camera stays near torso height out to ~15m, so
+    // aiming at a rival actually hits them. In a car it keeps the old high
+    // chase framing.
+    const cy = target.y + (inCar ? 2 : 1.35) + Math.sin(this.pitch) * wantDist * (inCar ? 1 : 0.6);
     const k = 1 - Math.exp(-dt * (inCar ? 5 : 8));
     this.pos.x = lerp(this.pos.x, cx, k);
     this.pos.y = lerp(this.pos.y, cy, k);

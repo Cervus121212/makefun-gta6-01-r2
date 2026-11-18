@@ -18,12 +18,13 @@ function canvasTexture(size, draw) {
   return t;
 }
 
-function windowTexture(base, lit) {
+function windowTexture(base, lit, rng) {
   return canvasTexture(128, (g, s) => {
     g.fillStyle = base; g.fillRect(0, 0, s, s);
     for (let y = 8; y < s - 8; y += 16) {
       for (let x = 8; x < s - 8; x += 14) {
-        g.fillStyle = Math.random() < 0.35 ? lit : '#1d2733';
+        // Seeded rng: the same windows light up on every load.
+        g.fillStyle = rng() < 0.35 ? lit : '#1d2733';
         g.fillRect(x, y, 9, 11);
       }
     }
@@ -56,13 +57,17 @@ export function buildCity(scene) {
     g.fillStyle = '#24272c';
     for (const r of ROAD_LINES) {
       g.fillRect(toPx(r - WORLD.roadHalf), 0, toPx(WORLD.roadHalf * 2) - toPx(0), toPx(WORLD.beachZ));
-      g.fillRect(0, toPx(r - WORLD.roadHalf), toPx(half + WORLD.roadHalf), toPx(WORLD.roadHalf * 2) - toPx(0));
+      // Full map width: the old width (toPx(half + roadHalf), a position used
+      // as a width) stopped the road paint at x=239.
+      g.fillRect(0, toPx(r - WORLD.roadHalf), s, toPx(WORLD.roadHalf * 2) - toPx(0));
     }
-    // lane dashes
+    // lane dashes: vertical roads run -232..252, horizontal roads span the map
     g.fillStyle = '#d8c25a';
     for (const r of ROAD_LINES) {
       for (let v = -half; v < WORLD.beachZ; v += 16) {
         g.fillRect(toPx(r) - 1, toPx(v), 2, 7);
+      }
+      for (let v = -320; v < 320; v += 16) {
         g.fillRect(toPx(v), toPx(r) - 1, 7, 2);
       }
     }
@@ -88,8 +93,8 @@ export function buildCity(scene) {
 
   // ---- buildings ----
   const winTex = [
-    windowTexture('#8a6f5c', '#ffd98a'), windowTexture('#5c6e8a', '#ffe9a8'),
-    windowTexture('#7a8a7a', '#fff2b0'),
+    windowTexture('#8a6f5c', '#ffd98a', rng), windowTexture('#5c6e8a', '#ffe9a8', rng),
+    windowTexture('#7a8a7a', '#fff2b0', rng),
   ];
   const roofColors = [0x9a7b5f, 0x6f7f95, 0x8a8f7a, 0xb08a6a];
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
@@ -158,6 +163,34 @@ export function buildCity(scene) {
     colliders.push({ minX: x - 4, maxX: x + 4, minZ: z - 1.6, maxZ: z + 1.6 });
   }
 
+  // ---- docks props: a gantry crane + crates, so the apron is a working pier
+  // instead of a bare grey slab. Kept clear of the mission-4 fight line
+  // (264, 120) and of the container row.
+  const craneMat = new THREE.MeshLambertMaterial({ color: 0xc0a040 });
+  const craneDark = new THREE.MeshLambertMaterial({ color: 0x4a4a52 });
+  const craneBase = new THREE.Mesh(new THREE.BoxGeometry(3, 1.2, 3), craneDark);
+  craneBase.position.set(268, 0.6, 95); scene.add(craneBase);
+  const craneTower = new THREE.Mesh(new THREE.BoxGeometry(1.4, 17, 1.4), craneMat);
+  craneTower.position.set(268, 9.7, 95); scene.add(craneTower);
+  const craneJib = new THREE.Mesh(new THREE.BoxGeometry(17, 0.8, 0.8), craneMat);
+  craneJib.position.set(259.5, 18.2, 95); scene.add(craneJib);
+  const craneCounter = new THREE.Mesh(new THREE.BoxGeometry(5, 0.8, 0.8), craneMat);
+  craneCounter.position.set(270.5, 18.2, 95); scene.add(craneCounter);
+  const craneCable = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 7, 6), craneDark);
+  craneCable.position.set(253, 14.5, 95); scene.add(craneCable);
+  const craneHook = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.1, 1.1), craneDark);
+  craneHook.position.set(253, 10.5, 95); scene.add(craneHook);
+  colliders.push({ minX: 266.5, maxX: 269.5, minZ: 93.5, maxZ: 96.5 });
+  const crateGeo = new THREE.BoxGeometry(2.2, 2.2, 2.2);
+  const crateColors = [0x8a6f4a, 0x6f7f5a, 0x7a5a3a];
+  for (const [cx, cz, cy] of [[258, 62, 1.1], [260, 140, 1.1], [270, 158, 1.1], [256, 176, 1.1], [260, 140, 3.3]]) {
+    const crate = new THREE.Mesh(crateGeo, new THREE.MeshLambertMaterial({ color: pick(rng, crateColors) }));
+    crate.position.set(cx, cy, cz);
+    crate.rotation.y = range(rng, -0.2, 0.2);
+    scene.add(crate);
+    if (cy < 2) colliders.push({ minX: cx - 1.1, maxX: cx + 1.1, minZ: cz - 1.1, maxZ: cz + 1.1 });
+  }
+
   // ---- marina boats (south, on the sand edge) ----
   const hullMat = new THREE.MeshLambertMaterial({ color: 0xe8e4da });
   for (let b = 0; b < 5; b++) {
@@ -207,6 +240,78 @@ export function buildCity(scene) {
   makeSign('SAFEHOUSE ROW', -72, -166, Math.PI / 2);
   makeSign('OLD TOWN', -150, 8, Math.PI / 2);
 
+  // ---- beach billboards: big canvas-texture boards, same technique as the
+  // district signs. Two face the beach road, one faces east so the
+  // west-looking beach shots catch it face-on.
+  const makeBillboard = (main, sub, x, z, rotY, accent) => {
+    const tex = canvasTexture(512, (g, s) => {
+      g.fillStyle = '#141a24'; g.fillRect(0, 0, s, s);
+      g.fillStyle = accent; g.fillRect(0, 0, s, 16); g.fillRect(0, s - 16, s, 16);
+      g.fillStyle = '#f8f9fa'; g.font = 'bold 62px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(main, s / 2, s / 2 - 28);
+      g.fillStyle = '#ffd23e'; g.font = 'bold 30px sans-serif';
+      g.fillText(sub, s / 2, s / 2 + 52);
+    });
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(16, 5),
+      new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+    board.position.set(x, 7.5, z); board.rotation.y = rotY; scene.add(board);
+    const alongZ = Math.abs(Math.sin(rotY)) > 0.5;
+    for (const off of [-6, 6]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 5, 6), poleMat);
+      post.position.set(alongZ ? x : x + off, 2.5, alongZ ? z + off : z);
+      scene.add(post);
+    }
+    colliders.push(alongZ
+      ? { minX: x - 0.6, maxX: x + 0.6, minZ: z - 8, maxZ: z + 8 }
+      : { minX: x - 8, maxX: x + 8, minZ: z - 0.6, maxZ: z + 0.6 });
+  };
+  makeBillboard('CERVEZA VELA', 'ICE COLD · SINCE 1962', -120, 258, Math.PI / 2, '#c23b2e');
+  makeBillboard('TACOS EL FARO', 'OPEN LATE · BEACHFRONT', 30, 258, 0, '#e8c832');
+  makeBillboard('RADIO VELA', '88.1 · LA VOZ DEL PUERTO', 230, 258, 0, '#3a7bd5');
+
+  // ---- ferris wheel on the east beach — the beachfront landmark. The wheel
+  // faces east-west (seen face-on from the beach road); the rim spins slowly
+  // and the cabins stay upright, repositioned every frame from the angle.
+  const wheelX = 180, wheelZ = 272, wheelR = 14, wheelY = 17;
+  const wheelOuter = new THREE.Group();
+  wheelOuter.position.set(wheelX, wheelY, wheelZ);
+  wheelOuter.rotation.y = Math.PI / 2;
+  scene.add(wheelOuter);
+  const wheelSpin = new THREE.Group();
+  wheelOuter.add(wheelSpin);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(wheelR, 0.5, 8, 32),
+    new THREE.MeshLambertMaterial({ color: 0xd64545 }));
+  wheelSpin.add(rim);
+  const spokeGeo = new THREE.BoxGeometry(0.4, wheelR * 2, 0.4);
+  const spokeMat = new THREE.MeshLambertMaterial({ color: 0xe8e4da });
+  for (let s = 0; s < 4; s++) {
+    const spoke = new THREE.Mesh(spokeGeo, spokeMat);
+    spoke.rotation.z = (s * Math.PI) / 4;
+    wheelSpin.add(spoke);
+  }
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 1.5, 12),
+    new THREE.MeshLambertMaterial({ color: 0x30343a }));
+  hub.rotation.x = Math.PI / 2;
+  wheelSpin.add(hub);
+  const cabins = [];
+  const cabinGeo = new THREE.BoxGeometry(2.2, 2.2, 2.2);
+  const cabinColors = [0xd64545, 0x3a7bd5, 0xe8c832, 0x3a9a4a];
+  for (let i = 0; i < 8; i++) {
+    const cab = new THREE.Mesh(cabinGeo, new THREE.MeshLambertMaterial({ color: pick(rng, cabinColors) }));
+    wheelOuter.add(cab);
+    cabins.push({ mesh: cab, ang: (i / 8) * Math.PI * 2 });
+  }
+  // A-frame legs, in the wheel's plane.
+  const legGeo = new THREE.BoxGeometry(1, 20, 1);
+  const legMat = new THREE.MeshLambertMaterial({ color: 0xe8e4da });
+  for (const sz of [-1, 1]) {
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.set(wheelX, 9, wheelZ + sz * 5);
+    leg.rotation.x = -sz * 0.28;
+    scene.add(leg);
+  }
+  colliders.push({ minX: wheelX - 1, maxX: wheelX + 1, minZ: wheelZ - 6, maxZ: wheelZ + 6 });
+
   // ---- streetlights along main roads ----
   const bulbMat = new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffd76a });
   const poleGeo = new THREE.CylinderGeometry(0.12, 0.12, 6, 6);
@@ -235,12 +340,19 @@ export function buildCity(scene) {
   colliders.push({ minX: 141, maxX: 159, minZ: -156, maxZ: -144 });
 
   return {
-    colliders, buildings, sea,
+    colliders, buildings, sea, lampMat: bulbMat, ferris: wheelOuter,
     // Ambient life: the sea breathes (gentle swell + shimmer) so the beachfront
     // never looks frozen. Called every frame from main with the session clock.
     update(_dt, t) {
       sea.position.y = 0.15 + Math.sin(t * 0.8) * 0.08;
       sea.material.opacity = 0.86 + 0.04 * Math.sin(t * 0.5);
+      // Ferris wheel turns slowly; cabins stay upright on the rim.
+      const a0 = t * 0.12;
+      wheelSpin.rotation.z = a0;
+      for (const c of cabins) {
+        const a = c.ang + a0;
+        c.mesh.position.set(Math.cos(a) * wheelR, Math.sin(a) * wheelR, 0);
+      }
     },
     spawns: {
       player: [0, 24],

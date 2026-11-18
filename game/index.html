@@ -17,29 +17,84 @@
   #minimap { position: absolute; left: 16px; bottom: 16px; width: 168px; height: 168px;
     border: 2px solid rgba(255,255,255,.55); border-radius: 50%; background: #20262e; }
   #stats { position: absolute; right: 16px; top: 14px; text-align: right; text-shadow: 0 1px 3px #000; }
+  #clock { font-size: 15px; font-weight: 700; letter-spacing: 1px; color: #ffe9b0; }
   #stars { font-size: 26px; letter-spacing: 3px; color: #ffd23e; }
   #stars.hot { animation: blink 0.7s steps(2) infinite; }
   @keyframes blink { 50% { opacity: .45; } }
   #cash { font-size: 22px; font-weight: 700; color: #7dd87d; }
-  #health { margin-top: 6px; width: 190px; height: 12px; background: rgba(0,0,0,.55);
+  #health { margin-top: 6px; width: 190px; height: 16px; background: rgba(0,0,0,.55);
     border: 1px solid rgba(255,255,255,.5); margin-left: auto; }
   #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#37b24d,#94d82d); }
   #health-num { font-size: 12px; }
+  #armour { margin-top: 4px; width: 190px; height: 10px; background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.5); margin-left: auto; }
+  #armour-fill { height: 100%; width: 0%; background: linear-gradient(90deg,#1971c2,#4dabf7); }
+  #armour-num { font-size: 12px; color: #a5d8ff; }
+  #rep { margin-top: 4px; font-size: 11px; color: #d0bfff; }
+  #rep .bar { width: 190px; height: 8px; background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.5); margin: 2px 0 0 auto; }
+  #rep .rep-fill { height: 100%; background: linear-gradient(90deg,#9775fa,#da77f2); }
   #speedo { position: absolute; right: 18px; bottom: 18px; text-align: right; text-shadow: 0 1px 3px #000; }
-  #speed { font-size: 44px; font-weight: 800; line-height: 1; }
+  #car-name { font-size: 16px; font-weight: 800; color: #ffd23e; letter-spacing: 1px; }
+  #car-cond { font-size: 12px; margin-top: 2px; }
+  #car-cond-bar { width: 150px; height: 7px; background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.5); margin: 2px 0 0 auto; }
+  #car-cond-fill { height: 100%; width: 100%; background: linear-gradient(90deg,#37b24d,#94d82d); }
+  #speed { font-size: 64px; font-weight: 800; line-height: 1; }
   #speed-unit { font-size: 13px; opacity: .85; }
+  /* Weapon slots: pistol + SMG + two locked teasers. */
+  #weapons { position: absolute; right: 16px; top: 210px; display: flex; gap: 6px; }
+  .wslot { width: 54px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35);
+    border-radius: 6px; padding: 4px 2px; text-align: center; text-shadow: 0 1px 3px #000; }
+  .wslot.on { border-color: #ffd23e; background: rgba(255,210,62,.2); }
+  .wslot-n { display: block; font-size: 10px; color: #ffe9b0; }
+  .wslot-label { display: block; font-size: 11px; font-weight: 800; }
+  .wslot-ammo { display: block; font-size: 12px; color: #7dd87d; }
+  /* Police response panel: named units, live distance, behaviour tag. */
+  #pd-panel { position: absolute; left: 16px; top: 150px; width: 252px; display: none;
+    background: rgba(10,14,22,.8); border: 1px solid rgba(255,255,255,.25); border-radius: 8px;
+    padding: 6px 8px; font-size: 12px; text-shadow: 0 1px 3px #000; }
+  .pd-head { font-weight: 800; color: #8ec9ff; letter-spacing: 1px; margin-bottom: 3px; }
+  .pd-row { display: flex; justify-content: space-between; gap: 6px; padding: 2px 0; }
+  .pd-name { font-weight: 700; }
+  .pd-dist { color: #ffe9b0; }
+  .pd-tag { font-weight: 700; padding: 0 5px; border-radius: 4px; white-space: nowrap; }
+  .tag-ramming { background: #e03131; }
+  .tag-pursuit { background: #e8590c; }
+  .tag-cutting-off { background: #f59f00; color: #222; }
+  .tag-en-route { background: #495057; }
+  .tag-spotlight-on-you { background: #e03131; animation: blink 0.7s steps(2) infinite; }
+  .pd-more { color: #ced4da; font-style: italic; margin-top: 2px; }
+  /* Portrait dialog: a character talks, with a drawn portrait. */
+  #dialog { position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%);
+    width: 440px; max-width: 86vw; display: flex; gap: 12px; align-items: center;
+    background: rgba(10,14,22,.88); border: 1px solid #ffd23e; border-radius: 10px;
+    padding: 10px 14px; opacity: 0; transition: opacity .4s; pointer-events: none;
+    text-shadow: 0 1px 3px #000; }
+  #portrait { width: 76px; height: 76px; border-radius: 8px; flex: none; }
+  #dialog-name { font-size: 15px; font-weight: 800; color: #ffd23e; }
+  #dialog-role { font-size: 11px; letter-spacing: 1px; color: #8ec9ff; }
+  #dialog-text { font-size: 14px; line-height: 1.4; margin-top: 3px; }
   #mission { position: absolute; left: 16px; top: 14px; max-width: 430px; text-shadow: 0 1px 3px #000; }
   #mission-title { font-size: 19px; font-weight: 800; color: #ffd23e; }
   #mission-text { font-size: 15px; margin-top: 2px; }
   #mission-timer { font-size: 22px; font-weight: 800; color: #ff8a5c; }
+  #mission-stage { display: none; align-items: center; gap: 8px; margin-top: 4px; }
+  .stage-label { font-size: 12px; font-weight: 800; color: #ffd23e; letter-spacing: 1px; }
+  .segs { display: flex; gap: 3px; }
+  .seg { width: 26px; height: 8px; background: rgba(255,255,255,.25); border-radius: 2px; }
+  .seg.on { background: #ffd23e; }
+  #mission-next { display: none; font-size: 12px; color: #ffe9b0; margin-top: 3px; }
   #radio { position: absolute; left: 200px; bottom: 52px; font-size: 13px; opacity: .9; text-shadow: 0 1px 3px #000; }
+  #song { position: absolute; left: 200px; bottom: 30px; font-size: 13px; color: #ffb3d9;
+    text-shadow: 0 1px 3px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 460px; }
   #dj-line { position: absolute; left: 200px; bottom: 74px; max-width: 460px; font-size: 12px;
     font-style: italic; opacity: 0; transition: opacity .5s; text-shadow: 0 1px 3px #000; color: #ffe9b0;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #district { position: absolute; left: 200px; bottom: 96px; font-size: 13px; font-weight: 700;
     letter-spacing: 1px; text-shadow: 0 1px 3px #000; color: #ffe9b0;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 460px; }
-  #hint { position: absolute; right: 16px; bottom: 108px; text-align: right; max-width: 300px;
+  #hint { position: absolute; right: 16px; bottom: 150px; text-align: right; max-width: 300px;
     font-size: 13px; opacity: .9; text-shadow: 0 1px 3px #000; }
   #debrief { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); width: 520px;
     max-width: 86vw; background: rgba(10,14,22,.88); border: 1px solid #ffd23e; border-radius: 10px;
@@ -59,7 +114,7 @@
   #crosshair::before { left: 8px; top: 0; width: 2px; height: 18px; }
   #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
   /* Screens */
-  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: safe center;
     flex-direction: column; text-align: center; z-index: 10; overflow-y: auto;
     background: linear-gradient(180deg, rgba(20,16,40,.82), rgba(120,50,20,.78)); padding: 20px; }
   .screen h1 { font-size: 56px; margin: 0; letter-spacing: 4px; color: #ffd23e;
@@ -76,6 +131,22 @@
   #title-screen { display: flex; }
   #wasted-screen { background: linear-gradient(180deg, rgba(40,0,0,.85), rgba(10,10,10,.9)); }
   #wasted-screen h1 { color: #ff5040; text-shadow: 0 4px 0 #400, 0 8px 24px #000; }
+  /* Short viewports (e.g. 800x450): shrink the title screen so the heading
+     and the Start button both fit instead of being clipped top/bottom. */
+  @media (max-height: 560px) {
+    .screen { padding: 8px; }
+    .screen h1 { font-size: 34px; letter-spacing: 2px; }
+    .screen h2 { font-size: 15px; margin: 4px 0 8px; }
+    .screen p { font-size: 13px; line-height: 1.35; margin: 6px 0; }
+    .screen .controls { font-size: 12px; line-height: 1.5; padding: 8px 14px; margin: 8px 0; }
+    .screen button { font-size: 15px; padding: 8px 22px; }
+  }
+  /* Tiny windows (e.g. 400x225): the mission message must not cover the playfield. */
+  @media (max-width: 520px), (max-height: 320px) {
+    #msg { font-size: 13px; max-width: 92vw; top: 16%; }
+    #mission-title { font-size: 15px; }
+    #mission-text { font-size: 12px; }
+  }
 </style>
 </head>
 <body>
@@ -86,20 +157,28 @@
 
 <div id="hud">
   <canvas id="minimap" width="168" height="168"></canvas>
-  <div id="mission"><div id="mission-title"></div><div id="mission-text"></div><div id="mission-timer"></div></div>
+  <div id="mission"><div id="mission-title"></div><div id="mission-text"></div><div id="mission-timer"></div><div id="mission-stage"></div><div id="mission-next"></div></div>
+  <div id="pd-panel"></div>
   <div id="stats">
+    <div id="clock">DAY 1 18:52</div>
     <div id="stars">☆☆☆☆☆</div>
     <div id="cash">$0</div>
     <div id="health"><div id="health-fill"></div></div>
     <div id="health-num">100</div>
+    <div id="armour"><div id="armour-fill"></div></div>
+    <div id="armour-num">ARMOUR 0</div>
+    <div id="rep"></div>
   </div>
-  <div id="speedo"><div id="speed">—</div><div id="speed-unit">on foot</div></div>
+  <div id="weapons"></div>
+  <div id="speedo"><div id="car-name"></div><div id="car-cond"><span id="car-cond-text"></span><div id="car-cond-bar"><div id="car-cond-fill"></div></div></div><div id="speed">—</div><div id="speed-unit">on foot</div></div>
   <div id="radio">♪ VELA FM — synthwave</div>
+  <div id="song"></div>
   <div id="dj-line"></div>
   <div id="district">Downtown Vela</div>
   <div id="debrief"><div id="debrief-title"></div><div id="debrief-text"></div><div id="debrief-reward"></div></div>
   <div id="hint">WASD move · Shift run · E enter car · Click shoot</div>
   <div id="msg"></div>
+  <div id="dialog"><canvas id="portrait" width="76" height="76"></canvas><div class="dialog-body"><div id="dialog-name"></div><div id="dialog-role"></div><div id="dialog-text"></div></div></div>
 </div>
 <div id="crosshair"></div>
 
@@ -109,7 +188,7 @@
   <p id="story-intro"></p>
   <div class="controls">
     <b>WASD</b> move / drive &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>E</b> steal &amp; enter car, exit car<br>
-    <b>Mouse drag</b> look around &nbsp;·&nbsp; <b>Click</b> shoot &nbsp;·&nbsp; <b>1 / 2 / 3</b> radio &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; <b>P</b> pause<br>
+    <b>Mouse drag</b> look around &nbsp;·&nbsp; <b>Click</b> shoot &nbsp;·&nbsp; <b>1 / 2</b> weapons &nbsp;·&nbsp; <b>R</b> radio &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; <b>P</b> pause<br>
     8 story jobs with debriefs · 5-star wanted · police chases &amp; helicopter · traffic &amp; pedestrians · radio DJs · district street names · saves
   </div>
   <div>

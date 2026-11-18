@@ -3,15 +3,61 @@ import * as THREE from '../vendor/three/three.module.min.js';
 import { createCarMesh } from './vehicles.js';
 import { mulberry32, range, clamp, collideCircleAABB } from './random.js';
 
+// Porto Vela PD callsigns: sea names + a number. No two units share a name
+// while they are on the road together (round-robin through the list).
+const CALLSIGNS = ['GAVIOTA', 'TIBURÓN', 'DELFÍN', 'ATÚN', 'PULPO', 'RAYA', 'CORVINA', 'SARDINA'];
+
 export class Police {
   constructor(scene, colliders, getPlayer) {
     this.scene = scene; this.colliders = colliders; this.getPlayer = getPlayer;
     this.stars = 0; this.heat = 0; // heat 0..1 within the current star level
     this.cars = []; this.cops = []; this.heli = null; this.heliRotor = null;
     this.rng = mulberry32(99);
+    this.callIdx = 0;
+    this.heliCallsign = null;
     this.bustedT = 0; this.flashT = 0;
     this.heliAngle = 0; // orbit angle, advanced by dt (not wall clock) so poses can stage it
     this.onBusted = null; this.onWasted = null;
+    this.onRamFoot = null; // (x, z) => void: a cruiser clipped the player on foot
+  }
+  nextCallsign() {
+    const name = CALLSIGNS[this.callIdx % CALLSIGNS.length];
+    this.callIdx++;
+    return `${name}-${String(1 + Math.floor(this.rng() * 98)).padStart(2, '0')}`;
+  }
+  // Live response list for the HUD panel: every unit with its callsign,
+  // distance, and a behaviour tag derived from its real state. Sorted by
+  // distance, nearest first.
+  responseList(playerPos, playerHeading) {
+    const fx = Math.sin(playerHeading), fz = Math.cos(playerHeading);
+    const list = [];
+    const tagFor = (x, z, kind, prevDist) => {
+      const dx = x - playerPos.x, dz = z - playerPos.z;
+      const dist = Math.hypot(dx, dz);
+      const approaching = prevDist !== undefined && dist < prevDist - 0.5;
+      let tag = 'EN ROUTE';
+      if (kind === 'heli') tag = 'SPOTLIGHT ON YOU';
+      else if (dist < 15 && approaching) tag = 'RAMMING';
+      else if (dist < 45 && dist > 0.01 && (dx * fx + dz * fz) / dist > 0.6) tag = 'CUTTING OFF';
+      else if (dist < 80) tag = 'PURSUIT';
+      return { dist, tag };
+    };
+    for (const c of this.cars) {
+      const { dist, tag } = tagFor(c.x, c.z, 'car', c._prevDist);
+      c._prevDist = dist;
+      list.push({ name: c.callsign, dist, tag, kind: 'car' });
+    }
+    for (const c of this.cops) {
+      const { dist, tag } = tagFor(c.x, c.z, 'cop', c._prevDist);
+      c._prevDist = dist;
+      list.push({ name: c.callsign, dist, tag, kind: 'cop' });
+    }
+    if (this.heli) {
+      const { dist, tag } = tagFor(this.heli.position.x, this.heli.position.z, 'heli');
+      list.push({ name: this.heliCallsign, dist, tag, kind: 'heli' });
+    }
+    list.sort((a, b) => a.dist - b.dist);
+    return list;
   }
   setStars(n) {
     this.stars = clamp(Math.round(n), 0, 5);
@@ -44,7 +90,7 @@ export class Police {
     const z = clamp(p.z + Math.sin(ang) * 70, -240, 280);
     const mesh = createCarMesh(0xf2f2f2, { police: true });
     this.scene.add(mesh);
-    this.cars.push({ mesh, x, z, heading: 0, speed: 0 });
+    this.cars.push({ mesh, x, z, heading: 0, speed: 0, ramFootT: 0, callsign: this.nextCallsign() });
   }
   removeCar(c) { this.scene.remove(c.mesh); this.cars.splice(this.cars.indexOf(c), 1); }
   spawnCop() {
@@ -60,7 +106,7 @@ export class Police {
       new THREE.MeshLambertMaterial({ color: 0x0a1a4e }));
     cap.position.y = 2.15; mesh.add(cap);
     this.scene.add(mesh);
-    this.cops.push({ mesh, x: p.x + range(this.rng, -25, 25), z: p.z + range(this.rng, -25, 25), speed: 5.2 });
+    this.cops.push({ mesh, x: p.x + range(this.rng, -25, 25), z: p.z + range(this.rng, -25, 25), speed: 5.2, callsign: this.nextCallsign() });
   }
   removeCop(c) { this.scene.remove(c.mesh); this.cops.splice(this.cops.indexOf(c), 1); }
   spawnHeli() {
@@ -81,6 +127,7 @@ export class Police {
     this.heliCone = cone;
     this.scene.add(g);
     this.heli = g;
+    this.heliCallsign = this.nextCallsign();
   }
   update(dt, playerPos, playerInCar, playerSpeed) {
     // Wanted decay: only when the player is far from every police unit.
@@ -95,6 +142,9 @@ export class Police {
         this.heat = Math.min(1, this.heat + dt * 0.01);
       }
     }
+    // Light-bar flash clock: once per frame, not once per car — the blink
+    // rate used to scale with the number of cruisers on the road.
+    this.flashT += dt;
     // Police cars chase and ram.
     for (const c of this.cars) {
       const dx = playerPos.x - c.x, dz = playerPos.z - c.z;
@@ -115,13 +165,20 @@ export class Police {
       c.x = clamp(nx, -290, 290); c.z = clamp(nz, -250, 290);
       c.mesh.position.set(c.x, 0, c.z);
       c.mesh.rotation.y = c.heading;
-      // Ram: slow the player car on contact, damage on foot.
+      // Ram: slow the player car on contact; on foot a cruiser hit hurts and
+      // shoves the player (and still builds toward BUSTED while cops are near).
+      c.ramFootT = Math.max(0, (c.ramFootT || 0) - dt);
       if (dist < 3.4) {
         if (playerInCar && playerSpeed !== undefined) playerSpeed.hit = true;
-        if (!playerInCar) this.bustedT += dt;
+        if (!playerInCar) {
+          this.bustedT += dt;
+          if (c.ramFootT <= 0) {
+            c.ramFootT = 1.2;
+            if (this.onRamFoot) this.onRamFoot(c.x, c.z);
+          }
+        }
       }
       // Flash the light bar.
-      this.flashT += dt;
       if (c.mesh.userData.lightBar) {
         const on = Math.floor(this.flashT * 4) % 2 === 0;
         c.mesh.userData.lightBar.material.emissive.setHex(on ? 0xff2020 : 0x2020ff);

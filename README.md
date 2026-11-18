@@ -17,13 +17,32 @@ click shoot · 1/2/3 radio · M mute · P pause. Progress saves in the browser.
 
 - **Porto Vela**: a procedural 3D island city (9×9 blocks, beachfront, docks,
   marina, central park) in golden-hour light, built with vendored three.js.
-- **Systems**: on-foot and driving, stealable cars, traffic AI, pedestrians
-  (12 sidewalk walkers who flee from cars), 5-star wanted system with police
+- **Systems**: on-foot and driving, stealable cars (each with a name by paint
+  colour — BRISA GT, COSTA S, SOL COUPE, VELA ROADSTER, CORAL GT — and a
+  condition % that falls on hard hits, heals slowly, and cuts top speed 10%
+  under 50%), traffic AI, pedestrians
+  (12 sidewalk walkers who flee away from cars), 5-star wanted system with police
   chases, foot cops and a helicopter at 3+ stars (searchlight, distance-scaled
-  siren), pistol combat with tracers and hit flashes, health, cash (count-up
-  animation), radio (3 synthesized stations with rotating DJ ident lines),
-  minimap with story landmarks, HUD with live district + street names, brake
-  lights, start/pause/wasted screens, localStorage saves.
+  siren), a named police-response panel (Porto Vela PD callsigns + live
+  distance + behaviour tag per unit), pistol combat with tracers, hit flashes
+  and aim assist (a near-miss inside a small cone still counts), SMG pickup
+  (120 rounds, key 2, auto-switch back to the pistol when dry), armour vest
+  pickup (+50, absorbs damage first), health, cash (count-up animation),
+  REP (derived from jobs done + cash, ROOKIE → STREET DRIVER → GETAWAY PRO →
+  KING OF VELA), radio (3 synthesized stations, each with rotating DJ ident
+  lines and a "now playing" track), game clock (DAY 1 18:52, ~1 game minute
+  per 10 real seconds) driving the golden-hour-to-dusk sky, a low sun over the
+  western sea, billboards (CERVEZA VELA, TACOS EL FARO, RADIO VELA 88.1) and a
+  turning ferris wheel on the beach, minimap with story landmarks and a
+  correctly-rotating player arrow, HUD with live district + street names,
+  mission panel with stage bar + NEXT line, portrait dialogs (Mara Voss,
+  Det. Rook, Client — drawn procedurally), brake lights, start/pause/wasted
+  screens, localStorage saves (a save written by WASTED never loads a dead
+  player). Police cruisers that clip the player on foot cost 10 HP and shove
+  them out of the road; streetlights brighten as golden hour slides to dusk;
+  the docks apron has a gantry crane and crates; the on-foot camera rides low
+  and flat so the crosshair stays on a rival's torso (crosshair hidden while
+  driving).
 - **Story**: 8 jobs for Mara Voss and Det. Rook — car theft, pickup, police
   escape, dockside shootout, timed getaway, sedan chase, cash-van heist, and a
   4-star finale at the marina yacht — each with a briefing, mid-mission barks
@@ -52,11 +71,22 @@ click shoot · 1/2/3 radio · M mute · P pause. Progress saves in the browser.
 `?autopilot=1` drives the real game (walk, steal a car, drive, shoot, complete
 mission 1 + debrief, wanted system, helicopter + siren at 3 stars, radio + DJ
 line, district label, pedestrians, save round-trip, mission-4 enemy spawn, FPS
-sample) and writes results to `#test-results` and `document.title`
-(`AUTOPILOT-PASS` / `AUTOPILOT-FAIL:<check>`). 17 checks, all passing
-(5 consecutive headless runs, 0 console errors, 0 failed requests).
+sample) and then plays **all 8 missions end to end** — pickup + safehouse
+deliver, police escape (stepped wanted decay), the dockside shootout (aimed
+shots, player must survive), timed getaway, sedan ramming, cash-van heist,
+4-star survive + yacht — plus minimap-arrow pixel check, crosshair hidden
+while driving, live screen-reader status, streetlights brightening at dusk,
+title screen fitting 800×450, and a police-ram damage check — and the
+Phase-2 systems: named police-response panel with live distances, mission
+stage bar + NEXT line, SMG pickup + weapon switching + auto-switch on empty,
+armour vest pickup, game clock advancing 12 game-minutes per 120 session
+seconds, car name + condition on the speedometer, REP rank, portrait dialog
+on a bark, "now playing" track, ferris wheel and low sun in the world — and
+writes results to `#test-results` and `document.title`
+(`AUTOPILOT-PASS` / `AUTOPILOT-FAIL:<check>`). 43 checks, all passing
+(4 consecutive headless runs, 0 console errors, 0 failed requests).
 `?shot=<name>` stages a screenshot pose. Headless software rendering runs
-~3.5–3.8 fps at 800×450 (SwiftShader); the shadow map was cut 2048→1024 and
+~5.6–5.9 fps at 800×450 (SwiftShader); the shadow map was cut 2048→1024 and
 the pixel-ratio cap 2→1.75 to keep real-GPU play smooth.
 
 ## Why this rebuild

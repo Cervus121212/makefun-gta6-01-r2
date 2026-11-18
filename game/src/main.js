@@ -1,6 +1,6 @@
 // Porto Vela — main loop: player, cars, police, missions, HUD, save, shots, autopilot.
 import * as THREE from '../vendor/three/three.module.min.js';
-import { WORLD, MISSIONS, RADIO, STORY_INTRO, CAR, districtAt, streetAt } from './config.js';
+import { WORLD, MISSIONS, RADIO, STORY_INTRO, CAR, districtAt, streetAt, repFor } from './config.js';
 import { mulberry32, range, pick, clamp, collideCircleAABB } from './random.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
@@ -23,8 +23,8 @@ class Game {
     const _q0 = new URLSearchParams(location.search);
     this.lowfx = _q0.get('lowfx') === '1';
     this.renderer = createRenderer(this.canvas, this.lowfx);
-    const { scene, sun } = createScene(this.lowfx);
-    this.scene = scene; this.sun = sun;
+    const { scene, sun, skyMat, sunDisc } = createScene(this.lowfx);
+    this.scene = scene; this.sun = sun; this.skyMat = skyMat; this.sunDisc = sunDisc;
     this.camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 1600);
     this.cam = new ChaseCamera(this.camera);
     this.input = new Input(this.canvas);
@@ -35,6 +35,10 @@ class Game {
     this.peds = new Pedestrians(scene, 12);
     this.districtTimer = 0;
     this.djLineIdx = [0, 0, 0]; // rotating DJ ident per station
+    this.trackIdx = [0, 0, 0]; // rotating "now playing" track per station
+    this.radioIdx = 0;
+    this.armour = 0; // vest pickup: absorbs damage before health does
+    this.pickups = []; // SMG crates + armour vest (see spawnPickups)
     this.player = this.makePlayer();
     this.police = new Police(scene, this.city.colliders, () => ({ x: this.player.x, z: this.player.z }));
     this.combat = new Combat(scene, this.camera, () => ({ x: this.player.x, z: this.player.z }));
@@ -61,12 +65,26 @@ class Game {
       onFail: (why) => this.onMissionFail(why),
       onAllDone: () => this.onAllDone(),
       log: (t) => this.hud.message(t, 6000),
+      onBark: (b) => this.hud.showDialog(b.who, b.text),
     });
     this.combat.onPlayerHit = (dmg) => this.damagePlayer(dmg);
     this.combat.onEnemyDown = () => this.missions.onEnemyDown();
     this.police.onBusted = () => this.busted();
     this.police.onWasted = () => this.wasted();
+    // A cruiser clipping the player on foot costs 10 HP and shoves them out
+    // of the road — a ram used to do nothing at all unless a foot cop was near.
+    this.police.onRamFoot = (cx, cz) => {
+      if (this.state !== 'playing' || this.player.car) return;
+      const dx = this.player.x - cx, dz = this.player.z - cz;
+      const d = Math.hypot(dx, dz) || 1;
+      this.player.x = clamp(this.player.x + (dx / d) * 3, -290, 290);
+      this.player.z = clamp(this.player.z + (dz / d) * 3, -250, 290);
+      this.player.mesh.position.set(this.player.x, 0, this.player.z);
+      this.damagePlayer(10);
+      this.hud.message('A cruiser clipped you! Get out of the road!');
+    };
     this.spawnParkedCars();
+    this.spawnPickups();
     this.loadSave();
     this.bindUI();
     window.addEventListener('resize', () => this.onResize());
@@ -135,6 +153,55 @@ class Game {
     this.parked.push(van);
   }
 
+  // Glowing pickups: SMG crates at the docks + the garage, an armour vest
+  // by the safehouse door. Taken with E on foot; they bob and spin so the
+  // player can spot them from across the street.
+  spawnPickups() {
+    const mk = (kind, x, z, color, emissive) => {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(1.2, 1.2, 1.2),
+        new THREE.MeshLambertMaterial({ color, emissive }),
+      );
+      mesh.position.set(x, 0.9, z);
+      this.scene.add(mesh);
+      this.pickups.push({ kind, x, z, mesh, taken: false, phase: this.pickups.length * 2 });
+    };
+    mk('smg', 258, 88, 0x8a6d00, 0xffd23e);
+    mk('smg', 138, -138, 0x8a6d00, 0xffd23e);
+    mk('vest', -50, -168, 0x1a4a8a, 0x4dabf7);
+  }
+  tryTakePickup() {
+    const p = this.player;
+    for (const pk of this.pickups) {
+      if (pk.taken) continue;
+      if (Math.hypot(pk.x - p.x, pk.z - p.z) > 3) continue;
+      if (pk.kind === 'vest' && this.armour >= 100) continue;
+      pk.taken = true;
+      pk.mesh.visible = false;
+      if (pk.kind === 'smg') {
+        this.combat.giveSmg();
+        this.hud.message('SMG picked up — 120 rounds. Press 2 to switch.');
+      } else {
+        this.armour = Math.min(100, this.armour + 50);
+        this.hud.setArmour(this.armour);
+        this.hud.message('Armour vest +50. It takes hits before you do.');
+      }
+      this.audio.pickup();
+      return true;
+    }
+    return false;
+  }
+
+  // Game clock: day 1 starts 18:52, ~1 game minute per 10 real seconds.
+  gameMinutes() { return 18 * 60 + 52 + Math.floor(this.time / 10); }
+  clockText() {
+    const mins = this.gameMinutes();
+    const day = 1 + Math.floor(mins / 1440);
+    const hh = String(Math.floor(mins / 60) % 24).padStart(2, '0');
+    const mm = String(mins % 60).padStart(2, '0');
+    return `DAY ${day} ${hh}:${mm}`;
+  }
+
   spawnChaseCar() {
     const mesh = createCarMesh(0x2a8a3a);
     this.scene.add(mesh);
@@ -171,8 +238,10 @@ class Game {
     }
     this.hud.setCash(this.cash);
   }
-  // One place for station changes: audio + HUD station + rotating DJ ident line.
+  // One place for station changes: audio + HUD station + rotating DJ ident
+  // line + the "now playing" track (each station cycles its own playlist).
   setRadioStation(i) {
+    this.radioIdx = i;
     this.audio.setRadio(i);
     this.hud.setRadio(RADIO[i].name);
     const lines = RADIO[i].lines || [];
@@ -182,10 +251,21 @@ class Game {
     } else {
       this.hud.setDjLine('');
     }
+    const tracks = RADIO[i].tracks || [];
+    if (tracks.length) {
+      const t = tracks[this.trackIdx[i] % tracks.length];
+      this.trackIdx[i]++;
+      this.hud.setSong(`${t.title} — ${t.artist}`);
+    } else {
+      this.hud.setSong('');
+    }
   }
   resume() { if (this.state === 'paused') { this.state = 'playing'; this.hud.show('playing'); } }
   resetRun() {
-    this.cash = 0; this.player.health = 100;
+    this.cash = 0; this.player.health = 100; this.armour = 0;
+    this.hud.setArmour(0); // HUD syncs immediately, not a frame later
+    this.combat.weapon = 'pistol'; this.combat.hasSmg = false; this.combat.ammoSmg = 0;
+    for (const pk of this.pickups) { pk.taken = false; pk.mesh.visible = true; }
     this.police.setStars(0);
     this.combat.clearEnemies();
     this.missions.completed = new Set(); this.missions.index = 0; this.missions.active = false;
@@ -225,7 +305,13 @@ class Game {
   }
   damagePlayer(dmg) {
     if (this.state !== 'playing') return;
-    this.player.health -= dmg;
+    // Armour takes hits first; only the remainder reaches health.
+    const absorbed = Math.min(this.armour, dmg);
+    this.armour -= absorbed;
+    this.hud.setArmour(this.armour);
+    const rest = dmg - absorbed;
+    if (rest <= 0) return;
+    this.player.health -= rest;
     this.hud.setHealth(this.player.health);
     if (this.player.health <= 0) this.wasted();
   }
@@ -274,7 +360,10 @@ class Game {
       const data = JSON.parse(raw);
       this.save = data;
       this.cash = data.cash || 0;
-      this.player.health = data.health || 100;
+      // A save written by WASTED holds health <= 0 — never load a dead
+      // player; respawn at full health instead.
+      const h = data.health || 100;
+      this.player.health = h > 0 ? h : 100;
       this.missions.loadState(data.missions);
     } catch (_) {}
   }
@@ -326,7 +415,7 @@ class Game {
     this.player.car.parked = false;
     this.player.mesh.visible = false;
     this.audio.setEngine(0, true);
-    this.hud.setHint('WASD drive · E exit · 1/2/3 radio');
+    this.hud.setHint('WASD drive · E exit · 1/2 weapons · R radio');
     if (c.isVan) {
       this.police.setStars(3);
       this.hud.message('The whole precinct is coming. Get the van to the safehouse!');
@@ -370,18 +459,22 @@ class Game {
     const p = this.player;
     // Global keys.
     if (inp.pressed('KeyM')) { const m = this.audio.toggleMute(); this.hud.message(m ? 'Sound muted' : 'Sound on'); }
-    if (inp.pressed('Digit1')) this.setRadioStation(0);
-    if (inp.pressed('Digit2')) this.setRadioStation(1);
-    if (inp.pressed('Digit3')) this.setRadioStation(2);
+    if (inp.pressed('Digit1')) this.combat.setWeapon('pistol');
+    if (inp.pressed('Digit2')) this.combat.setWeapon('smg');
+    if (inp.pressed('KeyR')) this.setRadioStation((this.radioIdx + 1) % RADIO.length);
     if (inp.pressed('KeyP') || inp.pressed('Escape')) { this.state = 'paused'; this.hud.show('paused'); return; }
     if (inp.pressed('KeyE')) {
-      this.ePressed = true;
-      if (p.car) this.exitCar();
-      else this.tryEnterCar();
+      // Pickups first (on foot only): a crate by the feet beats entering a car.
+      const took = !p.car && this.tryTakePickup();
+      if (!took) {
+        this.ePressed = true;
+        if (p.car) this.exitCar();
+        else this.tryEnterCar();
+      }
     }
     if (inp.clicked && !p.car) this.combat.shoot(this.audio);
 
-    const axis = inp.axis();
+    const axis = inp.axis(dt);
     if (p.car) {
       const others = [...this.traffic.cars, ...this.parked, ...this.looseCars, ...this.police.cars];
       p.car.update(dt, axis, this.city.colliders, others);
@@ -471,7 +564,15 @@ class Game {
     this.traffic.update(dt, p.car);
     this.peds.update(dt, { x: p.x, z: p.z }, p.car ? { x: p.car.x, z: p.car.z } : null);
     this.city.update(dt, this.time);
-    updateDaylight(this.scene, this.sun, this.time);
+    // Dusk follows the game clock: 0 at 18:52, full dusk at 19:40.
+    const duskT = clamp((this.gameMinutes() - 1132) / 48, 0, 1);
+    updateDaylight(this.scene, this.sun, duskT, this.city.lampMat, this.skyMat, this.sunDisc);
+    // Pickups bob and spin so they catch the eye.
+    for (const pk of this.pickups) {
+      if (pk.taken) continue;
+      pk.mesh.position.y = 0.9 + Math.sin(this.time * 2 + pk.phase) * 0.25;
+      pk.mesh.rotation.y += dt * 1.2;
+    }
     const ramHit = { hit: false };
     this.police.update(dt, { x: p.x, z: p.z }, !!p.car, ramHit);
     // The siren was wired up in this polish pass: it follows the nearest unit.
@@ -488,13 +589,22 @@ class Game {
 
     // HUD.
     this.hud.setHealth(p.health);
+    this.hud.setArmour(this.armour);
+    this.hud.setClock(this.clockText());
+    this.hud.setRep(repFor(this.missions.completed.size, this.cash));
+    this.hud.setCar(p.car ? p.car.name : '', p.car ? p.car.condition : 100, !!p.car);
+    this.hud.setWeapons(this.combat.weaponState());
     this.hud.setStars(this.police.stars);
-    // District + street label, refreshed 4x a second (cheap, and it never flickers).
+    // Crosshair only on foot — shooting is on-foot only.
+    this.hud.setCrosshair(!p.car);
+    // District + street label + police response panel, refreshed 4x a second
+    // (cheap, and it never flickers).
     this.districtTimer += dt;
     if (this.districtTimer > 0.25) {
       this.districtTimer = 0;
       const street = streetAt(p.x, p.z);
       this.hud.setDistrict(street ? `${districtAt(p.x, p.z).name} · ${street}` : districtAt(p.x, p.z).name);
+      this.hud.setResponse(this.police.responseList({ x: p.x, z: p.z }, p.car ? p.car.heading : p.heading), this.police.stars);
     }
     this.hud.setSpeed(p.car ? p.car.speed * 3.6 : 0, !!p.car);
     const m = this.missions.current();
@@ -503,12 +613,17 @@ class Game {
       const s = this.missions.currentStep();
       if (s && s.type === 'survive') timer = `${Math.ceil(this.missions.timer)}s`;
       if (s && s.type === 'deliver') timer = `${Math.max(0, Math.ceil(s.time - this.missions.timer))}s`;
-      this.hud.setMission(`#${m.id} ${m.name} — ${m.giver}`, this.missions.stepText(), timer);
+      this.hud.setMission(`#${m.id} ${m.name} — ${m.giver}`, this.missions.stepText(), timer, this.missions.stageInfo());
     } else if (m) {
-      this.hud.setMission('Porto Vela — free roam', 'Press Enter or click Start to run the next job. Talk to Mara at the safehouse.', '');
+      this.hud.setMission('Porto Vela — free roam', 'Press Enter or click Start to run the next job. Talk to Mara at the safehouse.', '', null);
     } else {
-      this.hud.setMission('Porto Vela', 'All jobs complete.', '');
+      this.hud.setMission('Porto Vela', 'All jobs complete.', '', null);
     }
+    // Screen-reader status: the current job, kept in sync with the HUD.
+    const statusText = (this.missions.active && m)
+      ? `#${m.id} ${m.name} — ${this.missions.stepText()}`
+      : (m ? 'Porto Vela — free roam. Next job available.' : 'Porto Vela — all jobs complete.');
+    this.hud.setStatus(statusText);
     this.hud.drawMinimap({
       px: p.x, pz: p.z, heading: p.car ? p.car.heading : p.heading,
       marker: this.missions.markerPos,

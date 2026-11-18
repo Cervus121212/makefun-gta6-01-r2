@@ -1,6 +1,6 @@
 // Cars: mesh factory, arcade driving physics, traffic AI on the road grid.
 import * as THREE from '../vendor/three/three.module.min.js';
-import { CAR } from './config.js';
+import { CAR, carNameFor } from './config.js';
 import { ROAD_LINES, nearestRoadPoint } from './city.js';
 import { mulberry32, range, int, pick, clamp, collideCircleAABB } from './random.js';
 
@@ -34,6 +34,8 @@ export function createCarMesh(color, opts = {}) {
   }
   // Brake lights: kept in userData so DriveCar can flare them when braking.
   g.userData.tailLights = tails;
+  // Stealable-car name, from the paint colour (van / cruiser override).
+  g.userData.carName = carNameFor(color, opts);
   if (opts.police) {
     const bar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.22, 0.5),
       new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xff2020 }));
@@ -57,6 +59,11 @@ export class DriveCar {
   constructor(mesh, x, z, heading) {
     this.mesh = mesh; this.x = x; this.z = z; this.heading = heading;
     this.speed = 0; this.steer = 0; this.hp = 100;
+    this.name = mesh.userData.carName || 'VELA COUPE';
+    // Condition: hard hits wear the car down (min 25% — the player's car
+    // never stalls), it heals slowly after 5 s without a hit, and under 50%
+    // the top speed drops 10%.
+    this.condition = 100; this.sinceHit = 99;
     mesh.position.set(x, 0, z); mesh.rotation.y = heading;
   }
   update(dt, input, colliders, others) {
@@ -64,7 +71,12 @@ export class DriveCar {
     if (fwd > 0) this.speed += CAR.accel * dt;
     else if (fwd < 0) this.speed -= (this.speed > 0.5 ? CAR.brake : CAR.accel * 0.6) * dt;
     else this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), 8 * dt);
-    this.speed = clamp(this.speed, -CAR.maxReverse, CAR.maxSpeed);
+    const topSpeed = CAR.maxSpeed * (this.condition < 50 ? 0.9 : 1);
+    this.speed = clamp(this.speed, -CAR.maxReverse, topSpeed);
+    this.sinceHit += dt;
+    if (this.sinceHit > 5 && this.condition < 100) {
+      this.condition = Math.min(100, this.condition + dt * 2);
+    }
     const steerTarget = turn * (this.speed >= 0 ? 1 : -1);
     this.steer += (steerTarget - this.steer) * Math.min(1, dt * 8);
     this.heading += this.steer * CAR.turn * dt * clamp(Math.abs(this.speed) / 8, 0.15, 1) * (this.speed >= 0 ? 1 : -1);
@@ -72,7 +84,15 @@ export class DriveCar {
     let nz = this.z + Math.cos(this.heading) * this.speed * dt;
     for (const b of colliders) {
       const hit = collideCircleAABB(nx, nz, CAR.radius, b);
-      if (hit) { nx = hit.x; nz = hit.z; this.speed *= 0.4; }
+      if (hit) {
+        // Hard building hit: the impact speed chips the condition.
+        const impact = Math.abs(this.speed);
+        if (impact > 12) {
+          this.condition = Math.max(25, this.condition - (impact - 12) * 0.6);
+          this.sinceHit = 0;
+        }
+        nx = hit.x; nz = hit.z; this.speed *= 0.4;
+      }
     }
     // keep inside the map
     nx = clamp(nx, -290, 290); nz = clamp(nz, -250, 290);
@@ -81,6 +101,12 @@ export class DriveCar {
       const dx = nx - o.x, dz = nz - o.z, d2 = dx * dx + dz * dz;
       if (d2 < 12 && d2 > 1e-6) {
         const d = Math.sqrt(d2), push = (3.5 - d) / 2;
+        // Hard shunt against another car also wears the condition.
+        const impact = Math.abs(this.speed);
+        if (impact > 14) {
+          this.condition = Math.max(25, this.condition - (impact - 14) * 0.4);
+          this.sinceHit = 0;
+        }
         nx += (dx / d) * push; nz += (dz / d) * push;
         this.speed *= 0.85;
       }
@@ -169,14 +195,6 @@ export class Traffic {
       for (const w of c.mesh.userData.wheels) w.rotation.x += spin;
     }
   }
-  // Parked stealable cars near the player, for mission 1 and free roam.
-  spawnParked(scene, x, z, heading, color) {
-    const mesh = createCarMesh(color ?? pick(this.rng, BODY_COLORS));
-    scene.add(mesh);
-    const car = new DriveCar(mesh, x, z, heading);
-    car.parked = true;
-    return car;
-  }
 }
 
 // Pedestrians: sidewalk walkers who give the city life and make traffic feel
@@ -218,21 +236,29 @@ export class Pedestrians {
   }
   update(dt, playerPos, playerCar) {
     for (const w of this.walkers) {
-      // Flee: a car (or the player sprinting) within 7m makes them hurry away.
+      // Flee: a car (or the player sprinting) within 7m makes them run AWAY
+      // from the threat, not just faster along their own path.
       const threat = playerCar || playerPos;
       const dx = w.x - threat.x, dz = w.z - threat.z;
       const dist = Math.hypot(dx, dz);
       w.fleeing = dist < 7;
       const speed = w.fleeing ? w.speed * 2.6 : w.speed;
-      if (w.vertical) w.z += w.dir * speed * dt;
-      else w.x += w.dir * speed * dt;
-      // Turn around at the city edge or a random intersection pause.
-      const along = w.vertical ? w.z : w.x;
-      if (along > 240 || along < -230 || (this.rng() < dt * 0.02)) w.dir *= -1;
+      if (w.fleeing && dist > 0.01) {
+        // Straight away from the threat; heading faces the escape direction.
+        w.x += (dx / dist) * speed * dt;
+        w.z += (dz / dist) * speed * dt;
+        w.mesh.rotation.y = Math.atan2(dx, dz);
+      } else {
+        if (w.vertical) w.z += w.dir * speed * dt;
+        else w.x += w.dir * speed * dt;
+        // Turn around at the city edge or a random intersection pause.
+        const along = w.vertical ? w.z : w.x;
+        if (along > 240 || along < -230 || (this.rng() < dt * 0.02)) w.dir *= -1;
+        const heading = w.vertical ? (w.dir > 0 ? 0 : Math.PI) : (w.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+        w.mesh.rotation.y = heading;
+      }
       w.x = clamp(w.x, -240, 240); w.z = clamp(w.z, -240, 250);
-      const heading = w.vertical ? (w.dir > 0 ? 0 : Math.PI) : (w.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
       w.mesh.position.set(w.x, 0, w.z);
-      w.mesh.rotation.y = heading;
       // Walk cycle: legs swing, body bobs.
       w.phase += dt * speed * 4.5;
       const s = Math.sin(w.phase) * 0.5;

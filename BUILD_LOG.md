@@ -133,3 +133,114 @@ files, 0.75 MiB, dossier.json written. All 14 game JS files pass
 Commit: (see `git log` — "Porto Vela polish: deeper story, small details,
 smoother feel", on top of a0a4396). Recording `01a1ee62-6597-74be-9b40-4ee7dfb20507`
 still running at session end. NOT submitted, NOT pushed — parent's call.
+
+---
+
+# Porto Vela round 2 — RE-RECORD (18 Nov 2026, night)
+
+Base: eafab84 ("Porto Vela polish: deeper story, small details, smoother
+feel"). Reference: round-2 commits 53d6498 (FASE 1), e2ac7d7 (FASE 2),
+760bbbd (screenshot refresh) — read as specification only, never checked
+out / applied / copied; every line below was typed again in this session
+under the NEW recording `01a1eebe-fa7b-7384-9705-1ab1d7d7e474` (started
+20:00:55 WIB, alive through the whole session; parent owns seal/submit).
+Why a re-record: the round-2 recording (`01a1ee80`) died mid-session and was
+never sealed, so the tested round-2 code could not be submitted. No submit,
+no push.
+
+## 1. Fidelity check
+
+`git diff 760bbbd` on the finished tree shows the re-record is
+**byte-identical to round-2 in 13 of 15 files** (autopilot.js, main.js,
+city.js, combat.js, config.js, police.js, render.js, vehicles.js,
+missions.js, input.js, random.js, index.html, README.md). Only hud.js and
+shots.js differ — the 4 nit fixes in §2. BUILD_LOG.md itself differs only
+because this commit sits on eafab84, so the FASE 1 / FASE 2 sections live in
+the reference commits, not here.
+
+## 2. The 4 nit fixes (from the round-2 screenshot review)
+
+- **(a) Sun behind the PD panel (chase).** FIXED — the chase pose now slides
+  the sun disc north (`sunDisc.position.z = 240`; `updateDaylight` only ever
+  moves it vertically, so the shift survives the frame loop). The disc now
+  reads as a pale-gold circle in open sky, right of the PD panel and left of
+  the Mara bark text; the cover shot still shows it over the sea. Verified
+  on a 3x crop of the regenerated chase shot.
+- **(b) Player car small in the chase (~20 px).** PARTIALLY FIXED — camera
+  pulled a little closer (offset +36 → +28, look target −36 → −28) so the car
+  sits more central instead of low at the frame edge, but it still reads
+  ~25 px. A genuinely closer camera was worked out and rejected: the heli
+  orbits at 18 m / 34 m high, so any camera close enough to double the car
+  pushes the heli out of the top of the frame, and the staged cruisers sit
+  right beside a closer camera. Fixing it properly means re-staging the
+  heli orbit + cruiser offsets — a redesign, not a nit fix. Left as-is.
+- **(c) Small white bar in the speedometer on foot.** FIXED — the on-foot
+  speed was the 64 px em-dash '—', which rendered as a bar. `setSpeed`
+  now shows an empty speed on foot; the 'on foot' unit carries it. Verified
+  in the mission + cover shots (bottom-right shows only 'on foot').
+- **(d) Mara bark covering the middle of the fight (mission shot).** FIXED —
+  the mission pose docks the dialog lower-left (above the minimap) for that
+  shot only, so the beacon, the rivals and the crosshair stay clear. The
+  portrait + line are still visible; the dialog is unchanged in normal play.
+  (Note: there is no helicopter in the M4 mission shot — the bark was
+  covering the centre of the fight, which is what the dock fixes.)
+
+Pass-2 revisions (small, on top of the faithful re-record): `showDialog`
+guards a missing portrait canvas so a bark can never throw and break the
+mission flow; the autopilot's `dialog-portrait` check now also samples the
+portrait canvas pixels (it must be actually drawn, not just present);
+`resetRun()` calls `hud.setArmour(0)` so the HUD syncs immediately.
+
+## 3. Test results
+
+Headless Chrome for Testing, `node serve.ts` on :8080:
+
+| Run | Result | Checks | Time | Console errors |
+|-----|--------|--------|------|----------------|
+| re-record autopilot 1 | AUTOPILOT-PASS | 43/43 | 107.0 s | 0 |
+| re-record autopilot 2 | AUTOPILOT-PASS | 43/43 | 112.5 s | 0 |
+
+Notable values (identical both runs): clock DAY 1 18:53 → 19:05 (+12 min);
+car BRISA GT, CONDITION 90%; REP · ROOKIE — 160 pts; minimap arrow east 196
+vs west 62; mission 4: 4/4 kills, player HP 100→100 (the vest absorbed the
+rivals' damage); SMG 120 → 119 → auto-pistol at 0; dialog "Det. Rook:
+Green sedan, heading anywhere but here…"; PD panel 7 UNITS, heli DELFÍN-69
+SPOTLIGHT ON YOU 18 m; total cash $18,300. 0 failed requests.
+
+Probe (`~/workspace/makefun/r2-harness/r2-probe.mjs`, 400×225 lowfx,
+missions 2–8 + arrow; run twice, full report saved on the second run):
+M2 ✓, M3 ✓ (escaped, 24.3 game-s), M4 ✓ (4 kills, HP 100→38),
+M5 ✓, M6 ✓ (sedan rammed), M7 ✓ (van, 3 stars), M8 ✓ (survived 60.3
+game-s, state=end, cash $17,800). Arrow heading PI/2 (east). 0 console
+errors, 0 exceptions.
+
+Screenshot poses (`?shot=`, all SHOT-READY, 0 errors, visually inspected):
+title (fits fully, controls updated to "1 / 2 weapons · R radio"), chase
+(pink-purple dusk sky at 19:22, sun disc in open sky, heli in frame,
+2 cruisers, PD panel 7 units, stage bar 1/3, BRISA GT 85 km/h CONDITION
+100%), mission (Mara portrait dialog docked lower-left, stage bar 2/3,
+crane + crates + beacon + rivals, no speedo bar on foot), cover (round sun
+over the sea, Dante + BRISA GT centre, skyline right; HUD mission text is
+M1, same as round-2 — the frame loop overwrites the pose's setMission).
+
+`main.ts` check: `MAKEFUN_OUTPUT_DIR=/tmp/out-test-rerecord node main.ts` →
+game/ 16 files, 0.80 MiB, dossier.json written. All 14 game JS files pass
+`node --check`.
+
+### Harness notes (for the parent)
+
+- `cdp-autopilot.mjs` takes its timeout in MILLISECONDS (argv[3], default
+  180000). Passing `240` means 240 ms — the run exits after one poll with
+  only the first checks logged. Use `240000` for a 240 s budget.
+- The probe prints a `ARROW SHOT TAKEN` line before its JSON report, so the
+  report must be parsed after skipping the first line; the probe process
+  itself always exits 0.
+- Screenshots are regenerated with `cdp-run.mjs` + `shots.json` queries
+  (`?shot=<name>&seed=7`), same as round-2.
+
+## 4. Commit
+
+Commit: (see `git log` — "Porto Vela round 2 re-record: combat fix,
+winner-density HUD + sunset", on top of eafab84). Recording
+`01a1eebe-fa7b-7384-9705-1ab1d7d7e474` still running at session end.
+NOT submitted, NOT pushed — parent's call.

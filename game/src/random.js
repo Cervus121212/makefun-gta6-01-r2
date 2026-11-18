@@ -24,7 +24,6 @@ export function angleLerp(a, b, t) {
   while (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
 }
-export function dist2(ax, az, bx, bz) { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
 // Circle (x,z,r) vs AABB {minX,maxX,minZ,maxZ}: push the circle out, return corrected pos.
 export function collideCircleAABB(x, z, r, box) {
   const cx = clamp(x, box.minX, box.maxX);
