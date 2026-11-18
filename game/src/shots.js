@@ -24,6 +24,7 @@ export function applyShot(game, name) {
     game.spawnParkedCarAt(-44, 272, Math.PI / 2, 0xc23b2e);
     game.cam.snap(-76, 5, 286, -46, 2, 264);
     game.hud.setMission('PORTO VELA', 'Eight jobs. One yacht. No way back.', '');
+    game.hud.setDjLine('DJ Neon: "Sunset over the marina, synths on the radio."');
   } else if (name === 'chase') {
     // Coastal chase on the open beach: player car eastbound at 102 km/h, two
     // cruisers flanking behind, 3 stars, mission 7 active for the HUD.
@@ -39,6 +40,11 @@ export function applyShot(game, name) {
     });
     game.cam.snap(game.player.x - 30, 8, game.player.z + 16, game.player.x + 10, 2, game.player.z);
     game.hud.setSpeed(30 * 3.6, true);
+    // Stage the helicopter ahead of the player, inside the frame: the orbit
+    // angle is dt-driven, so it stays roughly here for the screenshot.
+    if (game.police.heli) game.police.heliAngle = -0.6;
+    document.getElementById('msg').style.display = 'block';
+    game.hud.message('Mara: "The helicopter is already in the air — don\u2019t give it a clean look at your plates."', 6000);
   } else if (name === 'mission') {
     // Dockside shootout: finish the goto step so 4 rivals + beacon are visible.
     p.x = 264; p.z = 120; p.heading = -Math.PI / 2;

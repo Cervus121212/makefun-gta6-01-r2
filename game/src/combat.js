@@ -13,6 +13,8 @@ export class Combat {
     this.cooldown = 0;
     this.flash = null;
     this.flashT = 0;
+    this.tracer = null;
+    this.tracerT = 0;
   }
   spawnEnemy(x, z) {
     const g = new THREE.Group();
@@ -27,7 +29,7 @@ export class Combat {
     gun.position.set(0.3, 1.2, 0.4); g.add(gun);
     g.position.set(x, 0, z);
     this.scene.add(g);
-    const e = { mesh: g, x, z, hp: 100, shootT: range(this.rng, 1, 2.5), strafe: range(this.rng, -1, 1) };
+    const e = { mesh: g, x, z, hp: 100, shootT: range(this.rng, 1, 2.5), strafe: range(this.rng, -1, 1), hitFlash: 0 };
     this.enemies.push(e);
     return e;
   }
@@ -42,12 +44,26 @@ export class Combat {
     this.raycaster.setFromCamera({ x: 0, y: 0 }, this.camera);
     const targets = this.enemies.map((e) => e.mesh);
     const hits = this.raycaster.intersectObjects(targets, true);
+    // Tracer: a brief bright line from the camera to the impact (or to the
+    // horizon on a miss) so every shot reads, hit or not.
+    const from = this.camera.position.clone();
+    const to = hits.length > 0 ? hits[0].point.clone() : from.clone().add(this.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(60));
+    if (!this.tracer) {
+      const geo = new THREE.BufferGeometry().setFromPoints([from, to]);
+      this.tracer = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe98a, transparent: true, opacity: 0.9 }));
+      this.scene.add(this.tracer);
+    } else {
+      this.tracer.geometry.setFromPoints([from, to]);
+    }
+    this.tracer.visible = true;
+    this.tracerT = 0.07;
     if (hits.length > 0) {
       let obj = hits[0].object;
       while (obj.parent && obj.parent !== this.scene) obj = obj.parent;
       const e = this.enemies.find((en) => en.mesh === obj);
       if (e) {
         e.hp -= 34;
+        e.hitFlash = 0.18; // the rival flashes white-red so the hit is unmistakable
         this.muzzle(e.x, e.z);
         if (e.hp <= 0) {
           this.scene.remove(e.mesh);
@@ -75,7 +91,17 @@ export class Combat {
       this.flashT -= dt;
       if (this.flashT <= 0) this.flash.visible = false;
     }
+    if (this.tracer) {
+      this.tracerT -= dt;
+      if (this.tracerT <= 0) this.tracer.visible = false;
+    }
     for (const e of this.enemies) {
+      // Hit flash: body glows for 0.18s after a hit, then settles back.
+      if (e.hitFlash > 0) {
+        e.hitFlash -= dt;
+        e.mesh.children[0].material.emissive.setHex(0xaa2020);
+        if (e.hitFlash <= 0) e.mesh.children[0].material.emissive.setHex(0x000000);
+      }
       const dx = playerPos.x - e.x, dz = playerPos.z - e.z;
       const dist = Math.hypot(dx, dz) || 1;
       // Strafe slowly, keep ~14m distance, face the player.

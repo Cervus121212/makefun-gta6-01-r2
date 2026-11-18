@@ -35,14 +35,17 @@ export function runAutopilot(game) {
       const dx0 = 29, dz0 = 100;
       let maxSpeed = 0;
       game.input.scriptDown('KeyW');
+      const driveT0 = performance.now();
       for (let i = 0; i < 90; i++) {
         await new Promise((r) => requestAnimationFrame(r));
         if (game.player.car) maxSpeed = Math.max(maxSpeed, Math.abs(game.player.car.speed));
       }
+      const driveFps = 90 / Math.max(0.1, (performance.now() - driveT0) / 1000);
       game.input.scriptUp('KeyW');
       const drove = Math.hypot(game.player.x - dx0, game.player.z - dz0);
       const speed = game.player.car ? Math.abs(game.player.car.speed) : 0;
       log('drive', drove > 20 && maxSpeed > 5, `drove ${drove.toFixed(1)}m, top speed ${maxSpeed.toFixed(1)} m/s, final ${speed.toFixed(1)}`);
+      log('fps', driveFps > 1, `${driveFps.toFixed(1)} fps in headless software rendering`);
       // 5. Exit + shoot (cooldown proves the shot path ran).
       game.exitCar();
       game.input.scriptClick();
@@ -60,10 +63,30 @@ export function runAutopilot(game) {
       const cashBefore = game.cash;
       await wait(300);
       log('mission-1', game.missions.completed.has(1), `step after steal=${stepAfterSteal}, cash ${cashBefore} -> ${game.cash}`);
+      // 6b. Debrief panel: the giver's closing line + reward must be on screen.
+      const debriefText = (document.getElementById('debrief') || {}).textContent || '';
+      log('debrief', debriefText.includes('First Wheels') && debriefText.includes('+$500'),
+        debriefText.slice(0, 80));
       // 7. Wanted system: set 2 stars, then clear and confirm decay path exists.
       game.police.setStars(2);
       log('wanted', game.police.stars === 2 && game.police.cars.length >= 2, `${game.police.cars.length} cruisers`);
+      // 7b. Helicopter + siren at 3 stars (the polish pass wired the siren up).
+      game.police.setStars(3);
+      game.audio.setSiren(true, game.police.nearestDist({ x: game.player.x, z: game.player.z }));
+      log('heli', !!game.police.heli, game.police.heli ? 'heli circling with searchlight' : 'no heli');
+      log('siren', !!game.audio.sirenNodes, game.audio.sirenNodes ? 'siren sounding, distance-scaled' : 'siren silent');
+      game.audio.setSiren(false);
       game.police.setStars(0);
+      // 7c. Radio switch updates the HUD station + DJ ident line.
+      game.setRadioStation(1);
+      const djText = (document.getElementById('dj-line') || {}).textContent || '';
+      log('radio', document.getElementById('radio').textContent.includes('COSTA 88') && djText.includes('La Voz'),
+        `station + DJ: ${djText.slice(0, 40)}`);
+      game.setRadioStation(0);
+      // 7d. District label + pedestrians: the city reads as a place, not a grid.
+      const districtText = (document.getElementById('district') || {}).textContent || '';
+      log('district', districtText.length > 3, districtText);
+      log('pedestrians', game.peds && game.peds.walkers.length >= 10, `${game.peds ? game.peds.walkers.length : 0} walkers on the sidewalks`);
       // 8. Save round-trips through localStorage.
       game.saveGame();
       let saved = null;

@@ -10,6 +10,7 @@ export class Police {
     this.cars = []; this.cops = []; this.heli = null; this.heliRotor = null;
     this.rng = mulberry32(99);
     this.bustedT = 0; this.flashT = 0;
+    this.heliAngle = 0; // orbit angle, advanced by dt (not wall clock) so poses can stage it
     this.onBusted = null; this.onWasted = null;
   }
   setStars(n) {
@@ -26,7 +27,15 @@ export class Police {
     while (this.cops.length < wantCops) this.spawnCop();
     while (this.cops.length > wantCops) this.removeCop(this.cops[0]);
     if (this.stars >= 3 && !this.heli) this.spawnHeli();
-    if (this.stars < 3 && this.heli) { this.scene.remove(this.heli); this.heli = null; }
+    if (this.stars < 3 && this.heli) { this.scene.remove(this.heli); this.heli = null; this.heliRotor = null; this.heliCone = null; }
+  }
+  // Distance to the nearest police unit — drives siren volume in main.
+  nearestDist(playerPos) {
+    let nearest = Infinity;
+    for (const c of this.cars) nearest = Math.min(nearest, Math.hypot(c.x - playerPos.x, c.z - playerPos.z));
+    for (const c of this.cops) nearest = Math.min(nearest, Math.hypot(c.x - playerPos.x, c.z - playerPos.z));
+    if (this.heli) nearest = Math.min(nearest, Math.hypot(this.heli.position.x - playerPos.x, this.heli.position.z - playerPos.z));
+    return nearest;
   }
   spawnCar() {
     const p = this.getPlayer();
@@ -69,6 +78,7 @@ export class Police {
     const cone = new THREE.Mesh(new THREE.ConeGeometry(6, 26, 12, 1, true),
       new THREE.MeshLambertMaterial({ color: 0xfff2a8, transparent: true, opacity: 0.16, side: THREE.DoubleSide }));
     cone.rotation.x = Math.PI; cone.position.y = -14; g.add(cone);
+    this.heliCone = cone;
     this.scene.add(g);
     this.heli = g;
   }
@@ -123,7 +133,7 @@ export class Police {
       const dist = Math.hypot(dx, dz) || 1;
       c.x += (dx / dist) * c.speed * dt;
       c.z += (dz / dist) * c.speed * dt;
-      c.mesh.position.set(c.x, 0, c.z);
+      c.mesh.position.set(c.x, Math.abs(Math.sin(performance.now() * 0.012)) * 0.08, c.z);
       c.mesh.rotation.y = Math.atan2(dx, dz);
       if (dist < 1.6 && !playerInCar) {
         this.bustedT += dt;
@@ -131,12 +141,15 @@ export class Police {
       }
     }
     if (this.cops.length === 0 && this.cars.length > 0) this.bustedT = Math.max(0, this.bustedT - dt);
-    // Helicopter circles above the player.
+    // Helicopter circles above the player, searchlight sweeping the ground.
     if (this.heli) {
-      const t = performance.now() * 0.0004;
-      this.heli.position.set(playerPos.x + Math.cos(t) * 18, 34, playerPos.z + Math.sin(t) * 18);
+      this.heliAngle += dt * 0.4;
+      const t = this.heliAngle;
+      this.heli.position.set(playerPos.x + Math.cos(t) * 18, 34 + Math.sin(t * 2.3) * 1.2, playerPos.z + Math.sin(t) * 18);
       this.heli.rotation.y = Math.atan2(playerPos.x - this.heli.position.x, playerPos.z - this.heli.position.z);
       if (this.heliRotor) this.heliRotor.rotation.y += dt * 22;
+      // The searchlight cone sways side to side, hunting for the player.
+      if (this.heliCone) this.heliCone.rotation.z = Math.sin(this.heliAngle * 2.75) * 0.35;
     }
   }
 }

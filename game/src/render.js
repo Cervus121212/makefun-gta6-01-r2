@@ -1,10 +1,23 @@
 // Three.js scene: golden-hour lighting, sky gradient, chase camera.
 import * as THREE from '../vendor/three/three.module.min.js';
-import { clamp, lerp } from './random.js';
+import { clamp, lerp, damp, angleLerp, smoothstep } from './random.js';
+
+// Golden hour slowly slides toward dusk as a session runs: the sun sinks and
+// reddens, the fog warms, and the streetlights matter more. Purely cosmetic,
+// ~8 minutes from gold to deep dusk, and it never touches gameplay.
+export function updateDaylight(scene, sun, timeSec) {
+  const t = smoothstep(0, 480, timeSec);
+  sun.intensity = lerp(1.6, 1.05, t);
+  sun.color.setHex(0xffd9a0).lerp(_duskSun, t);
+  scene.fog.color.setHex(0xf2c184).lerp(_duskFog, t);
+}
+const _duskSun = new THREE.Color(0xff7a45);
+const _duskFog = new THREE.Color(0xc96a4a);
 
 export function createRenderer(canvas, lowfx = false) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowfx });
-  renderer.setPixelRatio(lowfx ? 1 : Math.min(window.devicePixelRatio, 2));
+  // Cap pixel ratio at 1.75: retina-sharp enough, ~25% fewer fragments than 2x.
+  renderer.setPixelRatio(lowfx ? 1 : Math.min(window.devicePixelRatio, 1.75));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = !lowfx;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -36,7 +49,9 @@ export function createScene(lowfx = false) {
   const sun = new THREE.DirectionalLight(0xffd9a0, 1.6);
   sun.position.set(-80, 130, 200); // low southern sun: sunset over the sea, lit north faces
   sun.castShadow = !lowfx;
-  sun.shadow.mapSize.set(2048, 2048);
+  // 1024 shadow map: still crisp at street level, roughly 4x cheaper to render
+  // than 2048 in software rasterisers — the biggest single frame-time win.
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = -260; sun.shadow.camera.right = 260;
   sun.shadow.camera.top = 260; sun.shadow.camera.bottom = -260;
   sun.shadow.camera.far = 700;
@@ -53,12 +68,28 @@ export class ChaseCamera {
     this.dist = 11;
     this.pos = new THREE.Vector3(0, 8, 30);
     this.look = new THREE.Vector3(0, 1.5, 0);
+    this.lastDragT = -10;    // seconds since the player last dragged the mouse
+    this.baseFov = 62;
   }
-  update(dt, target, inCar, speed01, input) {
-    // Mouse drag orbits; wheel zooms.
+  update(dt, target, inCar, speed01, input, carHeading) {
+    // Mouse drag orbits; wheel zooms. Remember the drag so the camera can
+    // gently swing back behind the car once the player lets go.
+    if ((input.mouseDX || 0) !== 0 || (input.mouseDY || 0) !== 0) this.lastDragT = 0;
+    else this.lastDragT += dt;
     this.yaw -= (input.mouseDX || 0) * 0.004;
     this.pitch = clamp(this.pitch + (input.mouseDY || 0) * 0.003, 0.08, 1.1);
     if (input.wheel) this.dist = clamp(this.dist + input.wheel * 0.01, 6, 20);
+    // While driving and the mouse has been idle >1.5s, ease the camera back
+    // behind the car's direction of travel — no more steering blind.
+    if (inCar && carHeading !== undefined && this.lastDragT > 1.5 && speed01 > 0.05) {
+      this.yaw = angleLerp(this.yaw, carHeading, 1 - Math.exp(-dt * 0.9));
+    }
+    // Speed FOV kick: the world rushes a little at full throttle.
+    const wantFov = this.baseFov + (inCar ? speed01 * 8 : 0);
+    if (Math.abs(this.camera.fov - wantFov) > 0.05) {
+      this.camera.fov = damp(this.camera.fov, wantFov, 4, dt);
+      this.camera.updateProjectionMatrix();
+    }
     const wantDist = inCar ? this.dist + speed01 * 4 : this.dist;
     const cx = target.x - Math.sin(this.yaw) * Math.cos(this.pitch) * wantDist;
     const cz = target.z - Math.cos(this.yaw) * Math.cos(this.pitch) * wantDist;

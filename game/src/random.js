@@ -13,6 +13,17 @@ export function int(rng, min, max) { return Math.floor(range(rng, min, max + 1))
 export function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
 export function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 export function lerp(a, b, t) { return a + (b - a) * t; }
+// Frame-rate independent exponential smoothing: damp(a, b, lambda, dt) moves a
+// toward b; lambda ~4-8 feels like a soft spring, lambda ~2 is a slow drift.
+export function damp(a, b, lambda, dt) { return lerp(a, b, 1 - Math.exp(-lambda * dt)); }
+export function smoothstep(a, b, x) { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+// Shortest-arc interpolation between two headings (radians).
+export function angleLerp(a, b, t) {
+  let d = b - a;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
 export function dist2(ax, az, bx, bz) { const dx = ax - bx, dz = az - bz; return dx * dx + dz * dz; }
 // Circle (x,z,r) vs AABB {minX,maxX,minZ,maxZ}: push the circle out, return corrected pos.
 export function collideCircleAABB(x, z, r, box) {

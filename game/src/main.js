@@ -1,16 +1,16 @@
 // Porto Vela — main loop: player, cars, police, missions, HUD, save, shots, autopilot.
 import * as THREE from '../vendor/three/three.module.min.js';
-import { WORLD, MISSIONS, RADIO, STORY_INTRO, CAR } from './config.js';
+import { WORLD, MISSIONS, RADIO, STORY_INTRO, CAR, districtAt, streetAt } from './config.js';
 import { mulberry32, range, pick, clamp, collideCircleAABB } from './random.js';
 import { Input } from './input.js';
 import { AudioEngine } from './audio.js';
 import { buildCity } from './city.js';
-import { createCarMesh, DriveCar, Traffic } from './vehicles.js';
+import { createCarMesh, DriveCar, Traffic, Pedestrians } from './vehicles.js';
 import { Police } from './police.js';
 import { Combat } from './combat.js';
 import { MissionManager } from './missions.js';
 import { HUD } from './hud.js';
-import { createRenderer, createScene, ChaseCamera } from './render.js';
+import { createRenderer, createScene, ChaseCamera, updateDaylight } from './render.js';
 import { applyShot } from './shots.js';
 import { runAutopilot } from './autopilot.js';
 
@@ -32,6 +32,9 @@ class Game {
     this.hud = new HUD();
     this.city = buildCity(scene);
     this.traffic = new Traffic(scene, this.city.colliders);
+    this.peds = new Pedestrians(scene, 12);
+    this.districtTimer = 0;
+    this.djLineIdx = [0, 0, 0]; // rotating DJ ident per station
     this.player = this.makePlayer();
     this.police = new Police(scene, this.city.colliders, () => ({ x: this.player.x, z: this.player.z }));
     this.combat = new Combat(scene, this.camera, () => ({ x: this.player.x, z: this.player.z }));
@@ -54,6 +57,7 @@ class Game {
       consumeE: () => { const v = this.ePressed; this.ePressed = false; return v; },
       onPickup: () => { this.audio.pickup(); this.hud.message('Package secured.'); },
       onPass: (m) => this.onMissionPass(m),
+      onDebrief: (m) => this.hud.showDebrief(m),
       onFail: (why) => this.onMissionFail(why),
       onAllDone: () => this.onAllDone(),
       log: (t) => this.hud.message(t, 6000),
@@ -160,12 +164,24 @@ class Game {
     this.state = 'playing';
     this.hud.show('playing');
     this.audio.ensure();
-    this.audio.setRadio(this.audio.radioStation);
+    this.audio.resumeRadio(); // the context may be brand new — restart the station
     const m = this.missions.current();
     if (m && !this.missions.active && this.missions.completed.size < MISSIONS.length) {
       this.missions.start(this.missions.index);
     }
     this.hud.setCash(this.cash);
+  }
+  // One place for station changes: audio + HUD station + rotating DJ ident line.
+  setRadioStation(i) {
+    this.audio.setRadio(i);
+    this.hud.setRadio(RADIO[i].name);
+    const lines = RADIO[i].lines || [];
+    if (lines.length) {
+      this.hud.setDjLine(lines[this.djLineIdx[i] % lines.length]);
+      this.djLineIdx[i]++;
+    } else {
+      this.hud.setDjLine('');
+    }
   }
   resume() { if (this.state === 'paused') { this.state = 'playing'; this.hud.show('playing'); } }
   resetRun() {
@@ -237,7 +253,9 @@ class Game {
     this.player.health = 100;
     this.hud.setHealth(100);
     this.player.x = 0; this.player.z = 24;
-    if (this.player.car) { this.player.car = null; }
+    // The car the player was driving is not lost: it stays where it stopped,
+    // re-enterable, instead of vanishing from every list.
+    if (this.player.car) { this.looseCars.push(this.player.car); this.player.car = null; }
     this.player.mesh.position.set(0, 0, 24);
     this.player.mesh.visible = true;
   }
@@ -352,9 +370,9 @@ class Game {
     const p = this.player;
     // Global keys.
     if (inp.pressed('KeyM')) { const m = this.audio.toggleMute(); this.hud.message(m ? 'Sound muted' : 'Sound on'); }
-    if (inp.pressed('Digit1')) { this.audio.setRadio(0); this.hud.setRadio(RADIO[0].name); }
-    if (inp.pressed('Digit2')) { this.audio.setRadio(1); this.hud.setRadio(RADIO[1].name); }
-    if (inp.pressed('Digit3')) { this.audio.setRadio(2); this.hud.setRadio(RADIO[2].name); }
+    if (inp.pressed('Digit1')) this.setRadioStation(0);
+    if (inp.pressed('Digit2')) this.setRadioStation(1);
+    if (inp.pressed('Digit3')) this.setRadioStation(2);
     if (inp.pressed('KeyP') || inp.pressed('Escape')) { this.state = 'paused'; this.hud.show('paused'); return; }
     if (inp.pressed('KeyE')) {
       this.ePressed = true;
@@ -451,8 +469,13 @@ class Game {
     }
 
     this.traffic.update(dt, p.car);
+    this.peds.update(dt, { x: p.x, z: p.z }, p.car ? { x: p.car.x, z: p.car.z } : null);
+    this.city.update(dt, this.time);
+    updateDaylight(this.scene, this.sun, this.time);
     const ramHit = { hit: false };
     this.police.update(dt, { x: p.x, z: p.z }, !!p.car, ramHit);
+    // The siren was wired up in this polish pass: it follows the nearest unit.
+    this.audio.setSiren(this.police.stars > 0, this.police.nearestDist({ x: p.x, z: p.z }));
     if (ramHit.hit && p.car) p.car.speed *= 0.7;
     this.combat.update(dt, { x: p.x, z: p.z });
     this.missions.update(dt);
@@ -460,12 +483,19 @@ class Game {
     // Camera follows the player (or the car) — unless a screenshot pose froze it.
     const target = { x: p.x, y: 0, z: p.z };
     if (!this.shotCam) {
-      this.cam.update(dt, target, !!p.car, p.car ? Math.abs(p.car.speed) / CAR.maxSpeed : 0, inp);
+      this.cam.update(dt, target, !!p.car, p.car ? Math.abs(p.car.speed) / CAR.maxSpeed : 0, inp, p.car ? p.car.heading : undefined);
     }
 
     // HUD.
     this.hud.setHealth(p.health);
     this.hud.setStars(this.police.stars);
+    // District + street label, refreshed 4x a second (cheap, and it never flickers).
+    this.districtTimer += dt;
+    if (this.districtTimer > 0.25) {
+      this.districtTimer = 0;
+      const street = streetAt(p.x, p.z);
+      this.hud.setDistrict(street ? `${districtAt(p.x, p.z).name} · ${street}` : districtAt(p.x, p.z).name);
+    }
     this.hud.setSpeed(p.car ? p.car.speed * 3.6 : 0, !!p.car);
     const m = this.missions.current();
     if (this.missions.active && m) {

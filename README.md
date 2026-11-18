@@ -17,13 +17,23 @@ click shoot · 1/2/3 radio · M mute · P pause. Progress saves in the browser.
 
 - **Porto Vela**: a procedural 3D island city (9×9 blocks, beachfront, docks,
   marina, central park) in golden-hour light, built with vendored three.js.
-- **Systems**: on-foot and driving, stealable cars, traffic AI, pedestrians,
-  5-star wanted system with police chases, foot cops and a helicopter at 3+ stars,
-  pistol combat, health, cash, radio (3 synthesized stations), minimap, HUD,
-  start/pause/wasted screens, localStorage saves.
+- **Systems**: on-foot and driving, stealable cars, traffic AI, pedestrians
+  (12 sidewalk walkers who flee from cars), 5-star wanted system with police
+  chases, foot cops and a helicopter at 3+ stars (searchlight, distance-scaled
+  siren), pistol combat with tracers and hit flashes, health, cash (count-up
+  animation), radio (3 synthesized stations with rotating DJ ident lines),
+  minimap with story landmarks, HUD with live district + street names, brake
+  lights, start/pause/wasted screens, localStorage saves.
 - **Story**: 8 jobs for Mara Voss and Det. Rook — car theft, pickup, police
   escape, dockside shootout, timed getaway, sedan chase, cash-van heist, and a
-  4-star finale at the marina yacht.
+  4-star finale at the marina yacht — each with a briefing, mid-mission barks
+  from Mara/Rook/the client, and a debrief panel with the giver's closing line
+  and reward. Porto Vela itself has a history and 8 named districts
+  (Marlin Row, East Docks, Marina & Beachfront, Central Park, Safehouse Row,
+  North Gate, Old Town, Downtown Vela) with named streets, district signs,
+  beach umbrellas and a living sea; golden hour slides slowly toward dusk
+  over a session. The camera eases back behind the car while driving and the
+  field of view widens with speed.
 - **Sound**: everything synthesized with Web Audio — engine, sirens, gunshots,
   jingles, radio loops. No audio files, no network requests.
 
@@ -40,9 +50,14 @@ click shoot · 1/2/3 radio · M mute · P pause. Progress saves in the browser.
 ## Tests (headless Chrome)
 
 `?autopilot=1` drives the real game (walk, steal a car, drive, shoot, complete
-mission 1, wanted system, save round-trip) and writes results to `#test-results`
-and `document.title` (`AUTOPILOT-PASS` / `AUTOPILOT-FAIL:<check>`).
-`?shot=<name>` stages a screenshot pose.
+mission 1 + debrief, wanted system, helicopter + siren at 3 stars, radio + DJ
+line, district label, pedestrians, save round-trip, mission-4 enemy spawn, FPS
+sample) and writes results to `#test-results` and `document.title`
+(`AUTOPILOT-PASS` / `AUTOPILOT-FAIL:<check>`). 17 checks, all passing
+(5 consecutive headless runs, 0 console errors, 0 failed requests).
+`?shot=<name>` stages a screenshot pose. Headless software rendering runs
+~3.5–3.8 fps at 800×450 (SwiftShader); the shadow map was cut 2048→1024 and
+the pixel-ratio cap 2→1.75 to keep real-GPU play smooth.
 
 ## Why this rebuild
 

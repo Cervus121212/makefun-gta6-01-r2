@@ -34,6 +34,13 @@ export class MissionManager {
     if (!s) { this.completeMission(); return; }
     this.timer = 0;
     this.hideBeacon();
+    // Character bark when the step starts (Mara / Rook / the client talk mid-job).
+    const m = this.current();
+    if (m.barks) {
+      for (const b of m.barks) {
+        if (b.step === this.step) this.hooks.log(b.text, 6000);
+      }
+    }
     if (s.type === 'goto' || s.type === 'deliver') {
       this.markerPos = { x: s.at[0], z: s.at[1] };
       this.showBeacon(s.at[0], s.at[1]);
@@ -88,6 +95,8 @@ export class MissionManager {
     this.active = false; this.hideBeacon();
     this.completed.add(m.id);
     this.hooks.onPass(m);
+    // Debrief: the giver's closing line + reward, shown as its own panel.
+    if (this.hooks.onDebrief) this.hooks.onDebrief(m);
     this.index++;
     if (this.index >= MISSIONS.length) this.hooks.onAllDone();
   }
@@ -97,7 +106,11 @@ export class MissionManager {
     const s = this.currentStep();
     if (!s) return;
     const p = this.hooks.getPos();
-    if (this.beacon) this.beacon.rotation.y += dt * 1.2;
+    // Beacon breathes: pulse opacity + slow spin so the marker reads at a glance.
+    if (this.beacon) {
+      this.beacon.rotation.y += dt * 1.2;
+      if (this.beaconMat) this.beaconMat.opacity = 0.28 + 0.14 * Math.sin(this.timer * 3 + performance.now() * 0.004);
+    }
     switch (s.type) {
       case 'goto':
       case 'deliver': {

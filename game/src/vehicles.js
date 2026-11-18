@@ -23,13 +23,17 @@ export function createCarMesh(color, opts = {}) {
     g.add(w); wheels.push(w);
   }
   const lightMat = new THREE.MeshLambertMaterial({ color: 0xfff2b0, emissive: 0xffe98a });
+  const tails = [];
   for (const sx of [-0.6, 0.6]) {
     const h = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 0.1), lightMat);
     h.position.set(sx, 0.7, 2.22); g.add(h);
     const t = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.18, 0.1),
       new THREE.MeshLambertMaterial({ color: 0xc02020, emissive: 0x800000 }));
     t.position.set(sx, 0.7, -2.22); g.add(t);
+    tails.push(t);
   }
+  // Brake lights: kept in userData so DriveCar can flare them when braking.
+  g.userData.tailLights = tails;
   if (opts.police) {
     const bar = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.22, 0.5),
       new THREE.MeshLambertMaterial({ color: 0xffffff, emissive: 0xff2020 }));
@@ -86,6 +90,11 @@ export class DriveCar {
     this.mesh.rotation.y = this.heading;
     const spin = this.speed * dt * 2.4;
     for (const w of this.mesh.userData.wheels) w.rotation.x += spin;
+    // Brake lights flare while the brake/reverse key is held; dim otherwise.
+    const braking = fwd < 0;
+    for (const t of this.mesh.userData.tailLights || []) {
+      t.material.emissive.setHex(braking ? 0xff2020 : 0x800000);
+    }
   }
 }
 
@@ -144,8 +153,14 @@ export class Traffic {
       // Snap back onto the road centreline if drifted.
       const snap = nearestRoadPoint(nx, nz);
       if (c.vertical) nx = snap.x; else nz = snap.z;
-      if (Math.abs(nx) > 245 || Math.abs(nz) > 285) { // wrap around the map edge
-        nx = -nx * 0.9; nz = -nz * 0.9;
+      if (Math.abs(nx) > 245 || Math.abs(nz) > 285) {
+        // Respawning on a fresh random road beats mirroring across the map:
+        // no car ever visibly teleports through the city.
+        this.scene.remove(c.mesh);
+        const i = this.cars.indexOf(c);
+        if (i >= 0) this.cars.splice(i, 1);
+        this.spawn();
+        continue;
       }
       c.x = nx; c.z = nz;
       c.mesh.position.set(c.x, 0, c.z);
@@ -161,5 +176,69 @@ export class Traffic {
     const car = new DriveCar(mesh, x, z, heading);
     car.parked = true;
     return car;
+  }
+}
+
+// Pedestrians: sidewalk walkers who give the city life and make traffic feel
+// dangerous. They stroll along the sidewalk edge of a road, turn at
+// intersections, and hurry away when a car bears down on them.
+const PED_COLORS = [0xc96a3a, 0x3a6fc9, 0x7a4a9a, 0x2a6f4a, 0xd8d4c8, 0x8a2a2a, 0x2a8a8a];
+export class Pedestrians {
+  constructor(scene, count = 12) {
+    this.scene = scene;
+    this.rng = mulberry32(4242);
+    this.walkers = [];
+    for (let i = 0; i < count; i++) {
+      const vertical = this.rng() < 0.5;
+      const road = pick(this.rng, ROAD_LINES);
+      const along = range(this.rng, -220, 240);
+      const side = this.rng() < 0.5 ? -1 : 1;
+      const x = vertical ? road + side * 9.5 : along;
+      const z = vertical ? along : road + side * 9.5;
+      const g = new THREE.Group();
+      const shirt = new THREE.MeshLambertMaterial({ color: pick(this.rng, PED_COLORS) });
+      const skin = new THREE.MeshLambertMaterial({ color: 0xd8a070 });
+      const pants = new THREE.MeshLambertMaterial({ color: 0x2a3240 });
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), shirt);
+      body.position.y = 1.05; body.name = 'body'; g.add(body);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), skin);
+      head.position.y = 1.75; g.add(head);
+      const legL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.7, 0.3), pants);
+      legL.position.set(-0.18, 0.35, 0); legL.name = 'legL'; g.add(legL);
+      const legR = legL.clone(); legR.position.x = 0.18; legR.name = 'legR'; g.add(legR);
+      g.position.set(x, 0, z);
+      scene.add(g);
+      this.walkers.push({
+        mesh: g, x, z, vertical, road, side,
+        dir: this.rng() < 0.5 ? 1 : -1,
+        speed: range(this.rng, 1.2, 2.2),
+        phase: range(this.rng, 0, 6), fleeing: false,
+      });
+    }
+  }
+  update(dt, playerPos, playerCar) {
+    for (const w of this.walkers) {
+      // Flee: a car (or the player sprinting) within 7m makes them hurry away.
+      const threat = playerCar || playerPos;
+      const dx = w.x - threat.x, dz = w.z - threat.z;
+      const dist = Math.hypot(dx, dz);
+      w.fleeing = dist < 7;
+      const speed = w.fleeing ? w.speed * 2.6 : w.speed;
+      if (w.vertical) w.z += w.dir * speed * dt;
+      else w.x += w.dir * speed * dt;
+      // Turn around at the city edge or a random intersection pause.
+      const along = w.vertical ? w.z : w.x;
+      if (along > 240 || along < -230 || (this.rng() < dt * 0.02)) w.dir *= -1;
+      w.x = clamp(w.x, -240, 240); w.z = clamp(w.z, -240, 250);
+      const heading = w.vertical ? (w.dir > 0 ? 0 : Math.PI) : (w.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+      w.mesh.position.set(w.x, 0, w.z);
+      w.mesh.rotation.y = heading;
+      // Walk cycle: legs swing, body bobs.
+      w.phase += dt * speed * 4.5;
+      const s = Math.sin(w.phase) * 0.5;
+      w.mesh.getObjectByName('legL').rotation.x = s;
+      w.mesh.getObjectByName('legR').rotation.x = -s;
+      w.mesh.getObjectByName('body').position.y = 1.05 + Math.abs(Math.sin(w.phase)) * 0.05;
+    }
   }
 }

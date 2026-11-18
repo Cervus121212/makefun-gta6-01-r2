@@ -25,7 +25,8 @@ export class AudioEngine {
   setEngine(speed01, on) {
     if (!this.ctx) return;
     this.engineOsc.frequency.setTargetAtTime(45 + speed01 * 130, this.ctx.currentTime, 0.08);
-    this.engineGain.gain.setTargetAtTime(on ? 0.05 + speed01 * 0.06 : 0, this.ctx.currentTime, 0.1);
+    // Idle hum stays quiet; the engine only speaks up with speed.
+    this.engineGain.gain.setTargetAtTime(on ? 0.03 + speed01 * 0.07 : 0, this.ctx.currentTime, 0.1);
   }
   blip(freq, dur, type = 'square', vol = 0.12) {
     if (!this.ctx) return;
@@ -66,6 +67,16 @@ export class AudioEngine {
       this.sirenNodes = null;
     }
   }
+  // Siren loudness follows the nearest cruiser: close = urgent, far = a distant
+  // wail under the radio. Call every frame; pass null/0 distance when clear.
+  setSiren(on, nearestDist) {
+    this.siren(on);
+    if (!this.sirenNodes || !this.ctx) return;
+    const d = nearestDist == null ? 120 : nearestDist;
+    // Full volume inside ~15m, fading to a whisper by ~120m.
+    const vol = on ? Math.max(0.008, 0.06 * (1 - Math.min(1, d / 120))) : 0;
+    this.sirenNodes.g.gain.setTargetAtTime(vol, this.ctx.currentTime, 0.25);
+  }
   setRadio(station) {
     this.radioStation = station;
     if (this.radioTimer) { clearInterval(this.radioTimer); this.radioTimer = null; }
@@ -79,10 +90,13 @@ export class AudioEngine {
       const deg = scale[Math.floor(this.radioStep / 2) % scale.length] + (idx % 4 === 0 ? 12 : 0);
       const f = st.root * Math.pow(2, deg / 12) * (this.radioStep % 8 === 6 ? 0.5 : 1);
       this.blip(f, 0.16, 'triangle', 0.05);
-      if (idx % 4 === 0) this.blip(f / 2, 0.3, 'sine', 0.07);
+      if (idx % 4 === 0) { this.blip(f / 2, 0.3, 'sine', 0.07); this.blip(55, 0.12, 'sine', 0.1); }
       this.radioStep++;
     }, stepMs);
   }
+  // (Re)start the current station — needed when the AudioContext is created
+  // after the first setRadio call (e.g. the title-screen Start button).
+  resumeRadio() { if (this.ctx && RADIO[this.radioStation] && RADIO[this.radioStation].bpm) this.setRadio(this.radioStation); }
   toggleMute() {
     this.muted = !this.muted;
     if (this.master) this.master.gain.value = this.muted ? 0 : 0.5;

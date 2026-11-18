@@ -32,9 +32,23 @@
   #mission-title { font-size: 19px; font-weight: 800; color: #ffd23e; }
   #mission-text { font-size: 15px; margin-top: 2px; }
   #mission-timer { font-size: 22px; font-weight: 800; color: #ff8a5c; }
-  #radio { position: absolute; left: 200px; bottom: 22px; font-size: 13px; opacity: .9; text-shadow: 0 1px 3px #000; }
-  #hint { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  #radio { position: absolute; left: 200px; bottom: 52px; font-size: 13px; opacity: .9; text-shadow: 0 1px 3px #000; }
+  #dj-line { position: absolute; left: 200px; bottom: 74px; max-width: 460px; font-size: 12px;
+    font-style: italic; opacity: 0; transition: opacity .5s; text-shadow: 0 1px 3px #000; color: #ffe9b0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #district { position: absolute; left: 200px; bottom: 96px; font-size: 13px; font-weight: 700;
+    letter-spacing: 1px; text-shadow: 0 1px 3px #000; color: #ffe9b0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 460px; }
+  #hint { position: absolute; right: 16px; bottom: 108px; text-align: right; max-width: 300px;
     font-size: 13px; opacity: .9; text-shadow: 0 1px 3px #000; }
+  #debrief { position: absolute; left: 50%; top: 34%; transform: translateX(-50%); width: 520px;
+    max-width: 86vw; background: rgba(10,14,22,.88); border: 1px solid #ffd23e; border-radius: 10px;
+    padding: 16px 20px; text-align: left; opacity: 0; transition: opacity .5s; pointer-events: none; }
+  #debrief-title { font-size: 17px; font-weight: 800; color: #ffd23e; }
+  #debrief-text { font-size: 14px; line-height: 1.5; margin-top: 6px; color: #f1f3f5; }
+  #debrief-reward { font-size: 20px; font-weight: 800; color: #7dd87d; margin-top: 8px; }
+  #health-fill.low { animation: lowhp .6s steps(2) infinite; }
+  @keyframes lowhp { 50% { opacity: .5; } }
   #msg { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); max-width: 620px;
     text-align: center; font-size: 20px; font-weight: 700; text-shadow: 0 2px 4px #000;
     transition: opacity .4s; }
@@ -46,12 +60,12 @@
   #crosshair::after { left: 0; top: 8px; width: 18px; height: 2px; }
   /* Screens */
   .screen { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
-    flex-direction: column; text-align: center; z-index: 10;
+    flex-direction: column; text-align: center; z-index: 10; overflow-y: auto;
     background: linear-gradient(180deg, rgba(20,16,40,.82), rgba(120,50,20,.78)); padding: 20px; }
-  .screen h1 { font-size: 64px; margin: 0; letter-spacing: 4px; color: #ffd23e;
+  .screen h1 { font-size: 56px; margin: 0; letter-spacing: 4px; color: #ffd23e;
     text-shadow: 0 4px 0 #7a2a00, 0 8px 24px #000; }
   .screen h2 { font-size: 20px; font-weight: 400; margin: 6px 0 18px; color: #ffe9b0; }
-  .screen p { max-width: 640px; font-size: 16px; line-height: 1.55; }
+  .screen p { max-width: 640px; font-size: 15px; line-height: 1.5; }
   .screen .controls { font-size: 14px; opacity: .92; line-height: 1.8; background: rgba(0,0,0,.35);
     padding: 12px 22px; border-radius: 10px; margin: 14px 0; }
   .screen button { pointer-events: auto; font-size: 18px; font-weight: 700; padding: 12px 34px;
@@ -81,6 +95,9 @@
   </div>
   <div id="speedo"><div id="speed">—</div><div id="speed-unit">on foot</div></div>
   <div id="radio">♪ VELA FM — synthwave</div>
+  <div id="dj-line"></div>
+  <div id="district">Downtown Vela</div>
+  <div id="debrief"><div id="debrief-title"></div><div id="debrief-text"></div><div id="debrief-reward"></div></div>
   <div id="hint">WASD move · Shift run · E enter car · Click shoot</div>
   <div id="msg"></div>
 </div>
@@ -93,7 +110,7 @@
   <div class="controls">
     <b>WASD</b> move / drive &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>E</b> steal &amp; enter car, exit car<br>
     <b>Mouse drag</b> look around &nbsp;·&nbsp; <b>Click</b> shoot &nbsp;·&nbsp; <b>1 / 2 / 3</b> radio &nbsp;·&nbsp; <b>M</b> mute &nbsp;·&nbsp; <b>P</b> pause<br>
-    8 story jobs · 5-star wanted · police chases &amp; helicopter · traffic &amp; pedestrians · saves
+    8 story jobs with debriefs · 5-star wanted · police chases &amp; helicopter · traffic &amp; pedestrians · radio DJs · district street names · saves
   </div>
   <div>
     <button id="btn-start">▶ Start the story</button>

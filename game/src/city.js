@@ -169,8 +169,45 @@ export function buildCity(scene) {
     scene.add(cabin);
   }
 
-  // ---- streetlights along main roads ----
+  // ---- beach umbrellas: the beachfront reads as a beach, not an empty strip ----
+  // (poleMat is declared here — the umbrellas and district signs below use it too.)
   const poleMat = new THREE.MeshLambertMaterial({ color: 0x30343a });
+  const umbrellaColors = [0xd64545, 0x3a7bd5, 0xe8c832, 0x3a9a4a];
+  for (let u = 0; u < 6; u++) {
+    const x = -200 + u * 62 + range(rng, -6, 6);
+    const z = WORLD.beachZ + 14 + range(rng, 0, 10);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 6), poleMat);
+    pole.position.set(x, 1.3, z); scene.add(pole);
+    const top = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1, 8),
+      new THREE.MeshLambertMaterial({ color: pick(rng, umbrellaColors) }));
+    top.position.set(x, 2.9, z); scene.add(top);
+  }
+
+  // ---- district signs: canvas-text boards on poles so every neighbourhood names itself ----
+  const makeSign = (text, x, z, rotY) => {
+    const tex = canvasTexture(256, (g, s) => {
+      g.fillStyle = '#1d2733'; g.fillRect(0, 0, s, s);
+      g.fillStyle = '#ffd23e'; g.fillRect(0, 0, s, 10); g.fillRect(0, s - 10, s, 10);
+      g.fillStyle = '#f8f9fa'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(text, s / 2, s / 2 + 2);
+    });
+    const board = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.2),
+      new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+    board.position.set(x, 3.4, z); board.rotation.y = rotY; scene.add(board);
+    for (const px of [-3.6, 3.6]) {
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 3.4, 6), poleMat);
+      pole.position.set(x + Math.cos(rotY) * px, 1.7, z - Math.sin(rotY) * px); scene.add(pole);
+    }
+  };
+  makeSign('MARLIN ROW', 138, -128, Math.PI / 2);
+  makeSign('EAST DOCKS', 252, 40, 0);
+  makeSign('MARINA', 60, 240, 0);
+  makeSign('CENTRAL PARK', 0, -30, 0);
+  makeSign('NORTH GATE', -150, -224, 0);
+  makeSign('SAFEHOUSE ROW', -72, -166, Math.PI / 2);
+  makeSign('OLD TOWN', -150, 8, Math.PI / 2);
+
+  // ---- streetlights along main roads ----
   const bulbMat = new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffd76a });
   const poleGeo = new THREE.CylinderGeometry(0.12, 0.12, 6, 6);
   const bulbGeo = new THREE.SphereGeometry(0.35, 8, 6);
@@ -198,7 +235,13 @@ export function buildCity(scene) {
   colliders.push({ minX: 141, maxX: 159, minZ: -156, maxZ: -144 });
 
   return {
-    colliders, buildings,
+    colliders, buildings, sea,
+    // Ambient life: the sea breathes (gentle swell + shimmer) so the beachfront
+    // never looks frozen. Called every frame from main with the session clock.
+    update(_dt, t) {
+      sea.position.y = 0.15 + Math.sin(t * 0.8) * 0.08;
+      sea.material.opacity = 0.86 + 0.04 * Math.sin(t * 0.5);
+    },
     spawns: {
       player: [0, 24],
       garage: [150, -138],

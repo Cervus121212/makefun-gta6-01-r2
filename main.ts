@@ -8,13 +8,30 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+
+// Count the game payload first: the scorer refuses entries over its caps, so
+// fail loudly here instead of handing in a bundle the grader would reject.
+function countGame(dir) {
+  let files = 0, bytes = 0, longest = 0;
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) { const sub = countGame(p); files += sub.files; bytes += sub.bytes; longest = Math.max(longest, sub.longest); }
+    else { files++; const s = statSync(p).size; bytes += s; longest = Math.max(longest, Buffer.byteLength(p)); }
+  }
+  return { files, bytes, longest };
+}
+const gameStats = countGame(join(here, 'game'));
+if (gameStats.files > 993) throw new Error(`game/ has ${gameStats.files} files (cap 993)`);
+if (gameStats.bytes > 50331648) throw new Error(`game/ is ${gameStats.bytes} bytes (cap 48 MiB)`);
+if (gameStats.longest > 1000) throw new Error(`a game/ path is ${gameStats.longest} bytes (cap 1000)`);
+console.log(`game/: ${gameStats.files} files, ${(gameStats.bytes / 1048576).toFixed(2)} MiB`);
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'game'), join(out, 'game'), { recursive: true });

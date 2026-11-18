@@ -38,6 +38,7 @@ const MIME: Record<string, string> = {
 };
 
 createServer((request, response) => {
+  const started = Date.now();
   const url = new URL(request.url ?? '/', 'http://localhost');
   let pathname: string;
   try {
@@ -65,8 +66,14 @@ createServer((request, response) => {
     'content-type': MIME[extname(file).toLowerCase()] ?? 'application/octet-stream',
     'content-length': size,
     'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
   });
+  // HEAD answers with headers only; GET streams the file.
+  if (request.method === 'HEAD') { response.end(); return; }
   createReadStream(file).pipe(response);
+  response.on('finish', () => {
+    if (process.env.SERVE_LOG) console.log(`${request.method} ${pathname} 200 ${Date.now() - started}ms`);
+  });
 }).listen(port, '127.0.0.1', () => {
   console.log(`game/ is on http://localhost:${port}`);
 });

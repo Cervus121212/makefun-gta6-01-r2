@@ -7,6 +7,8 @@ export class Input {
     this.mouseDown = false; this.clicked = false;
     this.dragging = false; this.lastX = 0; this.lastY = 0;
     this.scripted = new Set(); // keys injected by autopilot
+    this.smoothX = 0; this.smoothY = 0; // eased axis values (no more binary steering)
+    this.mouseSens = 1.0;
     this._onKeyDown = (e) => {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
       if (!this.keys.has(e.code)) this.justPressed.add(e.code);
@@ -20,7 +22,11 @@ export class Input {
     this._onMouseUp = () => { this.mouseDown = false; this.dragging = false; };
     this._onMouseMove = (e) => {
       if (!this.dragging) return;
-      this.mouseDX += e.clientX - this.lastX; this.mouseDY += e.clientY - this.lastY;
+      // Deadzone + damping: sub-pixel jitter never reaches the camera, and a
+      // flick of the wrist does not whip the view around.
+      const dx = e.clientX - this.lastX, dy = e.clientY - this.lastY;
+      if (Math.abs(dx) >= 1) this.mouseDX += dx * 0.85 * this.mouseSens;
+      if (Math.abs(dy) >= 1) this.mouseDY += dy * 0.85 * this.mouseSens;
       this.lastX = e.clientX; this.lastY = e.clientY;
     };
     this._onWheel = (e) => { this.wheel = (this.wheel || 0) + e.deltaY; };
@@ -45,7 +51,12 @@ export class Input {
     if (this.down('KeyS') || this.down('ArrowDown')) y -= 1;
     if (this.down('KeyA') || this.down('ArrowLeft')) x -= 1;
     if (this.down('KeyD') || this.down('ArrowRight')) x += 1;
-    return { x, y };
+    // Ease toward the target: full lock in ~0.12s, release in ~0.2s. Steering
+    // and throttle stop snapping from 0 to 1 in a single frame.
+    const k = 1 - Math.exp(-(x !== 0 || y !== 0 ? 22 : 14) * 0.016);
+    this.smoothX += (x - this.smoothX) * k;
+    this.smoothY += (y - this.smoothY) * k;
+    return { x: this.smoothX, y: this.smoothY };
   }
   endFrame() {
     this.justPressed.clear();
