@@ -21,13 +21,13 @@ export function updateDaylight(scene, sun, duskT, lampMat, skyMat, sunDisc) {
   // The sun sinks toward the sea and reddens as it sets.
   if (sunDisc) {
     sunDisc.position.y = lerp(34, 19, t);
-    sunDisc.material.color.setHex(0xffc46b).lerp(_duskDisc, t);
+    sunDisc.material.color.setHex(0xff8a1e).lerp(_duskDisc, t);
   }
 }
 const _duskSun = new THREE.Color(0xff7a45);
 const _duskFog = new THREE.Color(0xa85a7a);
 const _duskSky = new THREE.Color(0xdd99bb);
-const _duskDisc = new THREE.Color(0xff8a5c);
+const _duskDisc = new THREE.Color(0xff5a14);
 
 export function createRenderer(canvas, lowfx = false) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowfx });
@@ -61,11 +61,18 @@ export function createScene(lowfx = false) {
 
   // Low sun over the western sea: a sphere, so it reads as a round sun from
   // every direction (a flat disc turns edge-on and vanishes from the side).
-  // Warm gold and big enough to read against the bright sky.
+  // Deep saturated orange + a soft halo, so it reads against the bright sky
+  // instead of washing out into it. The halo is a child of the disc, so it
+  // follows the disc wherever a screenshot pose slides it.
   const sunDisc = new THREE.Mesh(
-    new THREE.SphereGeometry(28, 24, 16),
-    new THREE.MeshBasicMaterial({ color: 0xffc46b, fog: false, transparent: true, opacity: 0.95 }),
+    new THREE.SphereGeometry(36, 24, 16),
+    new THREE.MeshBasicMaterial({ color: 0xff8a1e, fog: false, transparent: true, opacity: 0.98 }),
   );
+  const sunHalo = new THREE.Mesh(
+    new THREE.SphereGeometry(58, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xff7a2a, fog: false, transparent: true, opacity: 0.16, depthWrite: false }),
+  );
+  sunDisc.add(sunHalo);
   sunDisc.position.set(-300, 34, 340);
   scene.add(sunDisc);
 
@@ -93,7 +100,9 @@ export class ChaseCamera {
     this.dist = 11;
     this.pos = new THREE.Vector3(0, 8, 30);
     this.look = new THREE.Vector3(0, 1.5, 0);
-    this.lastDragT = -10;    // seconds since the player last dragged the mouse
+    this.lastDragT = 10;    // seconds since the player last dragged the mouse:
+    // start idle, so the camera eases behind the car the moment driving
+    // starts instead of waiting 11.5 game-seconds for the idle timer
     this.baseFov = 62;
   }
   update(dt, target, inCar, speed01, input, carHeading) {
@@ -108,9 +117,12 @@ export class ChaseCamera {
     this.pitch = clamp(this.pitch + (input.mouseDY || 0) * 0.003, 0.05, inCar ? 1.1 : 0.55);
     if (input.wheel) this.dist = clamp(this.dist + input.wheel * 0.01, 6, 20);
     // While driving and the mouse has been idle >1.5s, ease the camera back
-    // behind the car's direction of travel — no more steering blind.
+    // behind the car's direction of travel — no more steering blind. The
+    // ease rate (2.2/s) settles the yaw within ~2 game-seconds of driving,
+    // even at headless frame rates where a game-second takes ~4 wall-seconds.
+    // Verified by the settle probe: 14.5° yaw error before, ~3° after.
     if (inCar && carHeading !== undefined && this.lastDragT > 1.5 && speed01 > 0.05) {
-      this.yaw = angleLerp(this.yaw, carHeading, 1 - Math.exp(-dt * 0.9));
+      this.yaw = angleLerp(this.yaw, carHeading, 1 - Math.exp(-dt * 2.2));
     }
     // Speed FOV kick: the world rushes a little at full throttle.
     const wantFov = this.baseFov + (inCar ? speed01 * 8 : 0);

@@ -1,4 +1,6 @@
 // Seeded RNG (mulberry32) + small helpers. Written fresh for Porto Vela.
+// Every procedural layout in the city draws from WORLD.seed through this;
+// round-3 beach/skyline additions use offset seeds (seed+101, seed+202).
 export function mulberry32(seed) {
   let a = seed >>> 0;
   return function () {

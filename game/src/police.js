@@ -1,4 +1,6 @@
 // Wanted system: stars, police chasers, foot cops, helicopter at 3+ stars, BUSTED/WASTED.
+// In screenshot poses the whole update is skipped (main.js, shotCam), so a
+// staged convoy holds still — live play and the autopilot never take that path.
 import * as THREE from '../vendor/three/three.module.min.js';
 import { createCarMesh } from './vehicles.js';
 import { mulberry32, range, clamp, collideCircleAABB } from './random.js';

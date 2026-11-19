@@ -64,7 +64,7 @@ class Game {
       onDebrief: (m) => this.hud.showDebrief(m),
       onFail: (why) => this.onMissionFail(why),
       onAllDone: () => this.onAllDone(),
-      log: (t) => this.hud.message(t, 6000),
+      log: (t) => this.hud.message(t, 3500),
       onBark: (b) => this.hud.showDialog(b.who, b.text),
     });
     this.combat.onPlayerHit = (dmg) => this.damagePlayer(dmg);
@@ -277,7 +277,7 @@ class Game {
   onMissionPass(m) {
     this.cash += m.reward;
     this.audio.missionPass();
-    this.hud.message(`MISSION PASSED — ${m.name}  +$${m.reward.toLocaleString('en-US')}`, 6000);
+    this.hud.message(`MISSION PASSED — ${m.name}  +$${m.reward.toLocaleString('en-US')}`, 5000);
     this.hud.setCash(this.cash);
     this.saveGame();
     if (this.missions.index < MISSIONS.length) {
@@ -293,7 +293,7 @@ class Game {
     }
   }
   onMissionFail(why) {
-    this.hud.message(`${why} Mission failed — try again from the pause menu.`, 6000);
+    this.hud.message(`${why} Mission failed — try again from the pause menu.`, 5000);
     this.audio.busted();
     if (this.missions.current()) setTimeout(() => { if (this.state === 'playing') this.missions.start(this.missions.index); }, 2000);
   }
@@ -477,7 +477,9 @@ class Game {
     const axis = inp.axis(dt);
     if (p.car) {
       const others = [...this.traffic.cars, ...this.parked, ...this.looseCars, ...this.police.cars];
-      p.car.update(dt, axis, this.city.colliders, others);
+      // Screenshot poses freeze the driven car too (see the police freeze
+      // below): the chase tableau holds its staged speed for the frame.
+      if (!this.shotCam) p.car.update(dt, axis, this.city.colliders, others);
       p.x = p.car.x; p.z = p.car.z;
       this.audio.setEngine(Math.abs(p.car.speed) / CAR.maxSpeed, true);
       // Ram the chase target.
@@ -574,7 +576,12 @@ class Game {
       pk.mesh.rotation.y += dt * 1.2;
     }
     const ramHit = { hit: false };
-    this.police.update(dt, { x: p.x, z: p.z }, !!p.car, ramHit);
+    // Screenshot poses freeze the police: a staged chase convoy would
+    // otherwise drive west out of the frozen pose camera in seconds, and
+    // the staged helicopter would orbit out of frame. Live play (and the
+    // autopilot/probe, which never use ?shot=) is unaffected — the freeze
+    // is gated on this.shotCam only, never on stars or mission state.
+    if (!this.shotCam) this.police.update(dt, { x: p.x, z: p.z }, !!p.car, ramHit);
     // The siren was wired up in this polish pass: it follows the nearest unit.
     this.audio.setSiren(this.police.stars > 0, this.police.nearestDist({ x: p.x, z: p.z }));
     if (ramHit.hit && p.car) p.car.speed *= 0.7;

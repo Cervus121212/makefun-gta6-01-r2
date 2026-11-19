@@ -89,6 +89,14 @@ writes results to `#test-results` and `document.title`
 ~5.6–5.9 fps at 800×450 (SwiftShader); the shadow map was cut 2048→1024 and
 the pixel-ratio cap 2→1.75 to keep real-GPU play smooth.
 
+Round 3 QA (see `BUILD_LOG.md`): chase camera now settles behind the car
+(yaw error ~0–3°), the mission feed is a small pill, the chase pose frames
+the player car at ~66 px with the convoy frozen, the sun is a big orange
+disc with a halo, the beach has props and the skyline has 6 facades plus
+2 new billboards, the minimap is high-contrast, and the docks are lit with
+floodlights and red-jacketed rivals in yellow caps. FPS is unchanged
+(A/B-verified: not a regression).
+
 ## Why this rebuild
 
 Round 1 ("Solmar Heat", rank ~1304, judge 984.522) was a 2D top-down canvas game.

@@ -72,7 +72,7 @@ export function buildCity(scene) {
       }
     }
     // docks apron (east)
-    g.fillStyle = '#6b6f75';
+    g.fillStyle = '#96999e';
     g.fillRect(toPx(WORLD.docksX - 14), toPx(40), toPx(28) - toPx(0), toPx(140) - toPx(0));
   });
   const ground = new THREE.Mesh(
@@ -92,11 +92,18 @@ export function buildCity(scene) {
   scene.add(sea);
 
   // ---- buildings ----
+  // Six facade textures now: warm brown, blue-grey and sage from round 2,
+  // plus warm brick, blue glass and cream (separate rng, so the building
+  // layout itself does not move). From the beach the skyline used to read
+  // as one monotonous brown wall; the brick / glass / cream faces break it.
+  const frng = mulberry32(WORLD.seed + 202);
   const winTex = [
     windowTexture('#8a6f5c', '#ffd98a', rng), windowTexture('#5c6e8a', '#ffe9a8', rng),
     windowTexture('#7a8a7a', '#fff2b0', rng),
+    windowTexture('#9a4a38', '#ffd98a', frng), windowTexture('#2f5f8a', '#cfe8ff', frng),
+    windowTexture('#c8b490', '#ffe9a8', frng),
   ];
-  const roofColors = [0x9a7b5f, 0x6f7f95, 0x8a8f7a, 0xb08a6a];
+  const roofColors = [0x9a7b5f, 0x6f7f95, 0x8a8f7a, 0xb08a6a, 0x4a6a8a, 0xb0503c, 0xd8c8a0];
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   for (let i = -WORLD.blocks; i <= WORLD.blocks; i++) {
     for (let j = -WORLD.blocks; j <= WORLD.blocks; j++) {
@@ -191,6 +198,27 @@ export function buildCity(scene) {
     if (cy < 2) colliders.push({ minX: cx - 1.1, maxX: cx + 1.1, minZ: cz - 1.1, maxZ: cz + 1.1 });
   }
 
+  // ---- docks work lights: tall floodlight poles with glowing heads, so
+  // the apron reads as a lit working pier at dusk instead of a murky slab.
+  // Kept clear of the mission-4 fight line (264, 116) and the crane.
+  // (Emissive heads only — no extra PointLight, to protect the headless fps.)
+  const floodPoleMat = new THREE.MeshLambertMaterial({ color: 0x30343a });
+  const floodMat = new THREE.MeshLambertMaterial({ color: 0xffe9a8, emissive: 0xffd76a, emissiveIntensity: 2 });
+  const floodHeadMat = new THREE.MeshLambertMaterial({ color: 0x30343a });
+  // The fourth pole stands by the fight (258, 126), shorter (6 m), just
+  // right of the docked dialog and left of the beacon, so its glowing head
+  // reads in the shot without hiding the rivals or the beacon.
+  for (const [fx, fz, fh] of [[256, 70, 8], [256, 160, 8], [272, 140, 8], [258, 126, 6]]) {
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, fh, 6), floodPoleMat);
+    pole.position.set(fx, fh / 2, fz); scene.add(pole);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.5, 0.7), floodHeadMat);
+    head.position.set(fx, fh + 0.2, fz); scene.add(head);
+    for (const hx of [-0.45, 0.45]) {
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 6), floodMat);
+      bulb.position.set(fx + hx, fh - 0.1, fz); scene.add(bulb);
+    }
+  }
+
   // ---- marina boats (south, on the sand edge) ----
   const hullMat = new THREE.MeshLambertMaterial({ color: 0xe8e4da });
   for (let b = 0; b < 5; b++) {
@@ -214,6 +242,69 @@ export function buildCity(scene) {
     const top = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1, 8),
       new THREE.MeshLambertMaterial({ color: pick(rng, umbrellaColors) }));
     top.position.set(x, 2.9, z); scene.add(top);
+  }
+
+  // ---- beach life, round 3: the wide beach shots read empty, so the sand
+  // near the beach road gets props — more umbrellas, towels, a lifeguard
+  // tower and walkers down by the water. A separate seeded rng keeps the
+  // main rng stream (and the whole city layout) byte-identical. Note the
+  // umbrellas sit at beachZ+32, clear of the chase pose's road at z≈270.
+  const brng = mulberry32(WORLD.seed + 101);
+  const towelGeo = new THREE.BoxGeometry(1.7, 0.08, 1);
+  const towelMats = [0xd64545, 0x3a7bd5, 0xe8c832, 0x3a9a4a, 0xff8a5c].map(
+    (c) => new THREE.MeshLambertMaterial({ color: c }));
+  for (let u = 0; u < 4; u++) {
+    const x = -150 + u * 95 + range(brng, -8, 8);
+    const z = WORLD.beachZ + 32 + range(brng, 0, 6);
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 6), poleMat);
+    pole.position.set(x, 1.3, z); scene.add(pole);
+    const top = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1, 8),
+      new THREE.MeshLambertMaterial({ color: pick(brng, umbrellaColors) }));
+    top.position.set(x, 2.9, z); scene.add(top);
+  }
+  for (let t = 0; t < 6; t++) {
+    const towel = new THREE.Mesh(towelGeo, towelMats[t % towelMats.length]);
+    towel.position.set(-170 + t * 64 + range(brng, -8, 8), 0.1,
+      WORLD.beachZ + 34 + range(brng, 0, 8));
+    towel.rotation.y = range(brng, -0.6, 0.6);
+    scene.add(towel);
+  }
+  // Lifeguard tower on the sand by the water, west of the marina.
+  const towerMat = new THREE.MeshLambertMaterial({ color: 0xe8e4da });
+  const towerRed = new THREE.MeshLambertMaterial({ color: 0xd64545 });
+  for (const [lx, lz] of [[-82, 286], [-78, 286], [-82, 290], [-78, 290]]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 3.2, 6), poleMat);
+    leg.position.set(lx, 1.6, lz); scene.add(leg);
+  }
+  const towerDeck = new THREE.Mesh(new THREE.BoxGeometry(5, 0.3, 5), towerMat);
+  towerDeck.position.set(-80, 3.3, 288); scene.add(towerDeck);
+  const towerRoof = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.25, 5.4), towerRed);
+  towerRoof.position.set(-80, 5.6, 288); scene.add(towerRoof);
+  for (const [px, pz] of [[-82, 286], [-78, 286], [-82, 290], [-78, 290]]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.3, 6), poleMat);
+    post.position.set(px, 4.5, pz); scene.add(post);
+  }
+  // Walkers down by the waterline — bright shirts, static figures (the
+  // roaming pedestrians stay on the sidewalks; these dress the beach).
+  const walkerGeo = new THREE.BoxGeometry(0.7, 0.95, 0.4);
+  const walkerHeadGeo = new THREE.BoxGeometry(0.4, 0.4, 0.4);
+  const walkerSkin = new THREE.MeshLambertMaterial({ color: 0xd8a070 });
+  const walkerPants = new THREE.MeshLambertMaterial({ color: 0x2a3240 });
+  const walkerShirts = [0xffd23e, 0xff6b6b, 0x4dabf7, 0x94d82d, 0xff8a5c].map(
+    (c) => new THREE.MeshLambertMaterial({ color: c }));
+  for (let w = 0; w < 5; w++) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(walkerGeo, walkerShirts[w]);
+    body.position.y = 1.05; g.add(body);
+    const head = new THREE.Mesh(walkerHeadGeo, walkerSkin);
+    head.position.y = 1.78; g.add(head);
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.7, 0.3), walkerPants);
+    legL.position.set(-0.18, 0.35, 0); g.add(legL);
+    const legR = legL.clone(); legR.position.x = 0.18; g.add(legR);
+    g.position.set(-130 + w * 62 + range(brng, -6, 6), 0,
+      WORLD.beachZ + 40 + range(brng, 0, 5));
+    g.rotation.y = range(brng, 0, Math.PI * 2);
+    scene.add(g);
   }
 
   // ---- district signs: canvas-text boards on poles so every neighbourhood names itself ----
@@ -268,6 +359,10 @@ export function buildCity(scene) {
   makeBillboard('CERVEZA VELA', 'ICE COLD · SINCE 1962', -120, 258, Math.PI / 2, '#c23b2e');
   makeBillboard('TACOS EL FARO', 'OPEN LATE · BEACHFRONT', 30, 258, 0, '#e8c832');
   makeBillboard('RADIO VELA', '88.1 · LA VOZ DEL PUERTO', 230, 258, 0, '#3a7bd5');
+  // Round 3: two more beach-facing boards, so the skyline from the sand
+  // carries signage instead of blank brown facades.
+  makeBillboard('HOTEL MIRAMAR', 'SEA VIEW · ROOMS FROM $60', -180, 258, 0, '#3a7bd5');
+  makeBillboard('CASINO DEL MAR', 'SLOTS · ALL NIGHT', 150, 258, 0, '#d64545');
 
   // ---- ferris wheel on the east beach — the beachfront landmark. The wheel
   // faces east-west (seen face-on from the beach road); the rim spins slowly

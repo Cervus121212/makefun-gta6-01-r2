@@ -1,4 +1,6 @@
 // Story mission state machine: steps, beacon markers, rewards, save progress.
+// Mission notices go through hud.message (now a 3 s pill, see hud.js) and
+// barks go through the portrait dialog — the two never share a channel.
 import * as THREE from '../vendor/three/three.module.min.js';
 import { MISSIONS } from './config.js';
 

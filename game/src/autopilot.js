@@ -3,7 +3,8 @@
 // Covers all 8 story missions end to end (teleports + real key/click events
 // + direct stepping of the wanted/survive timers, which would otherwise take
 // minutes of wall time at headless ~3 fps), plus the HUD/accessibility
-// systems. 43 checks.
+// systems. 43 checks. It never uses ?shot=, so the shot-mode freezes in
+// main.js cannot mask a gameplay regression here.
 export function runAutopilot(game) {
   const results = [];
   const log = (name, ok, detail) => {

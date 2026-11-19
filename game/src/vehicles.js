@@ -1,4 +1,6 @@
 // Cars: mesh factory, arcade driving physics, traffic AI on the road grid.
+// DriveCar.update is skipped while a screenshot pose is staged (main.js,
+// shotCam) so the chase tableau keeps its staged 30 m/s for the frame.
 import * as THREE from '../vendor/three/three.module.min.js';
 import { CAR, carNameFor } from './config.js';
 import { ROAD_LINES, nearestRoadPoint } from './city.js';

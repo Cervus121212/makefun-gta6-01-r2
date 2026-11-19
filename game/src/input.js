@@ -1,4 +1,6 @@
 // Keyboard + mouse input with edge detection and a scripted-input hook for autopilot tests.
+// The axis is eased (full lock ~0.12 s), so a held key ramps instead of snapping —
+// the chase camera's idle timer (render.js) reads the same key state.
 export class Input {
   constructor(canvas) {
     this.keys = new Set();

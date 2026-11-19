@@ -23,12 +23,18 @@ export class Combat {
   }
   spawnEnemy(x, z) {
     const g = new THREE.Group();
+    // Rival crew: vivid red jacket + a bright yellow cap, so they read
+    // against the grey docks apron at a glance instead of blending into it.
+    // The cap is emissive (not a light), so it costs nothing at dusk.
     const body = new THREE.Mesh(new THREE.BoxGeometry(0.85, 1.15, 0.5),
-      new THREE.MeshLambertMaterial({ color: 0x7a2020 }));
+      new THREE.MeshLambertMaterial({ color: 0xc22a2a }));
     body.position.y = 1.05; g.add(body);
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45),
       new THREE.MeshLambertMaterial({ color: 0xc89868 }));
     head.position.y = 1.9; g.add(head);
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.5),
+      new THREE.MeshLambertMaterial({ color: 0xffd23e, emissive: 0x8a6d00 }));
+    cap.position.y = 2.2; g.add(cap);
     const gun = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.7),
       new THREE.MeshLambertMaterial({ color: 0x111111 }));
     gun.position.set(0.3, 1.2, 0.4); g.add(gun);

@@ -1,4 +1,6 @@
 // Porto Vela — world constants, story missions, radio. All names original.
+// WORLD.seed is the single seed for the whole city: the beach props in
+// city.js use seed+101 / seed+202 so they never shift the main layout.
 export const WORLD = {
   seed: 7,
   pitch: 58,          // block pitch (block + road)

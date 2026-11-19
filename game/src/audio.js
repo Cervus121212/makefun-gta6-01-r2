@@ -1,4 +1,6 @@
 // All sound is synthesized with Web Audio — no audio files, no network.
+// The siren follows the nearest police unit (wired in main.js every frame),
+// and the radio keeps playing across mission transitions.
 import { RADIO } from './config.js';
 export class AudioEngine {
   constructor() {

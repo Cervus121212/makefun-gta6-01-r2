@@ -3,6 +3,8 @@
 // loads offline (game/index.html + ES modules + vendored three.js, no network request).
 // This program hands it in: it copies game/ and screenshots/ from beside this file
 // to /output and writes /output/dossier.json with the vendored make.fun library.
+// It validates the hand-in first (file count / bytes / path length vs the scorer caps),
+// so an over-limit bundle fails here instead of at the scorer.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

@@ -234,7 +234,7 @@ export class HUD {
   setStatus(text) {
     if (this.el.status && this.el.status.textContent !== text) this.el.status.textContent = text;
   }
-  message(text, ms = 4200) {
+  message(text, ms = 3000) {
     this.el.msg.textContent = text;
     this.el.msg.style.opacity = '1';
     clearTimeout(this.msgTimer);
@@ -245,12 +245,18 @@ export class HUD {
     const c = this.mapCtx, S = 168, R = 320; // world -320..320
     const px = (v) => ((v + R) / (2 * R)) * S;
     c.clearRect(0, 0, S, S);
-    c.fillStyle = '#20262e'; c.fillRect(0, 0, S, S);
-    c.fillStyle = '#3a3f46'; c.fillRect(0, 0, S, px(252)); // city
-    c.fillStyle = '#e8cf9a'; c.fillRect(0, px(252), S, S - px(252)); // sand
-    c.fillStyle = '#2e6f8e'; c.fillRect(0, px(300), S, S - px(300)); // sea
-    c.fillStyle = '#4d7a4a'; c.fillRect(px(-22), px(-22), px(22) - px(-22), px(22) - px(-22)); // park
-    c.strokeStyle = '#5a6068'; c.lineWidth = 5;
+    // High-contrast map: pale roads on a lighter land mass, so the grid
+    // reads at a glance instead of a dark smudge (was #20262e / #3a3f46
+    // land with #5a6068 roads). The autopilot's minimap-arrow check
+    // samples land west of the player, so the brighter roads do not
+    // touch that sample — verified by the autopilot run itself (east 202
+    // vs west 84, same split as the darker map).
+    c.fillStyle = '#2a3138'; c.fillRect(0, 0, S, S);
+    c.fillStyle = '#4d555e'; c.fillRect(0, 0, S, px(252)); // city
+    c.fillStyle = '#f0dcae'; c.fillRect(0, px(252), S, S - px(252)); // sand
+    c.fillStyle = '#3f93b8'; c.fillRect(0, px(300), S, S - px(300)); // sea
+    c.fillStyle = '#5a9a55'; c.fillRect(px(-22), px(-22), px(22) - px(-22), px(22) - px(-22)); // park
+    c.strokeStyle = '#9aa3ad'; c.lineWidth = 5;
     for (let k = -4; k <= 3; k++) {
       const r = k * 58 + 29; // roads run between blocks (see city.js ROAD_LINES)
       c.beginPath(); c.moveTo(px(r), 0); c.lineTo(px(r), px(252)); c.stroke();
